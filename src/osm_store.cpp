@@ -22,6 +22,8 @@
 // Views of data structures.
 //
 
+#include <stxxl/map>
+
 template<class NodeIt>
 struct NodeList {
 	NodeIt begin;
@@ -48,32 +50,63 @@ WayList<WayVec::const_iterator> makeWayList( const WayVec &outerWayVec, const Wa
 // Internal data structures.
 //
 
+#define DATA_NODE_BLOCK_SIZE (4096)
+#define DATA_LEAF_BLOCK_SIZE (4096)
+
+template <class T> class CompareGreater
+{
+public:
+	bool operator () (const T& a, const T& b) const { return a > b; }
+	static T max_value() { 
+		// Counter intuitively, this returns the min value. Setting it to max
+		// causes stxxl to segfault.
+		return std::numeric_limits<T>::min(); 
+	}
+};
+typedef CompareGreater<NodeID> CompareGreaterNodeID;
+
+// Ordered map is used because it is higher performance in stxxl, although functionally
+// we only need an unordered_map.
+typedef stxxl::map<NodeID, LatpLon, CompareGreaterNodeID, DATA_NODE_BLOCK_SIZE, DATA_LEAF_BLOCK_SIZE> NodeStoreMap;
+
+const stxxl::unsigned_type NODE_CACHE_SIZE_IN_BYTES = NodeStoreMap::node_block_type::raw_size * 100000;
+const stxxl::unsigned_type LEAF_CACHE_SIZE_IN_BYTES = NodeStoreMap::leaf_block_type::raw_size * 100000;
+
 // node store
 class NodeStore {
-	std::unordered_map<NodeID, LatpLon> mLatpLons;
+	 NodeStoreMap mLatpLons;
 
 public:
+	NodeStore(): mLatpLons(NODE_CACHE_SIZE_IN_BYTES, LEAF_CACHE_SIZE_IN_BYTES) {
+
+	}
+
+	virtual ~NodeStore() {
+	}
+
 	// @brief Lookup a latp/lon pair
 	// @param i OSM ID of a node
 	// @return Latp/lon pair
 	// @exception NotFound
 	LatpLon at(NodeID i) const {
-		try {
-			return mLatpLons.at(i);
-		}
-		catch (std::out_of_range &err){
+		NodeStoreMap::const_iterator it = mLatpLons.find(i);
+		if(it == mLatpLons.end())
+		{
 			stringstream ss;
-			ss << "Could not find node " << i;
+			ss << "Node " << i << " does not exist";
 			throw std::out_of_range(ss.str());
 		}
+		NodeStoreMap::const_reference pair = *it;
+		return pair.second;
 	}
 
-	// @brief Return whether a latp/lon pair is on the store.
+	// @brief Return whether a latp/lon pair is in the store.
 	// @param i Any possible OSM ID
 	// @return 1 if found, 0 otherwise
 	// @note This function is named as count for consistent naming with stl functions.
 	size_t count(NodeID i) const {
-		return mLatpLons.count(i);
+		NodeStoreMap::const_iterator it = mLatpLons.find(i);
+		return it != mLatpLons.end();
 	}
 
 	// @brief Insert a latp/lon pair.
@@ -82,7 +115,7 @@ public:
 	// @invariant The OSM ID i must be larger than previously inserted OSM IDs of nodes
 	//            (though unnecessarily for current impl, future impl may impose that)
 	void insert_back(NodeID i, LatpLon coord) {
-		mLatpLons.emplace(i, coord);
+		mLatpLons.insert(std::pair<NodeID, LatpLon>(i, coord));
 	}
 
 	// @brief Make the store empty
@@ -97,7 +130,7 @@ public:
 typedef vector<NodeID>::const_iterator WayStoreIterator;
 
 class WayStore {
-	std::unordered_map<WayID, const vector<NodeID>> mNodeLists;
+	std::unordered_map<WayID, const vector<NodeID> > mNodeLists;
 
 public:
 	// @brief Lookup a node list

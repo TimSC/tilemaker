@@ -628,7 +628,7 @@ int main(int argc, char* argv[]) {
 						nodeId += dense.id(j);
 						lon    += dense.lon(j);
 						lat    += dense.lat(j);
-						LatpLon node = { int(lat2latp(double(lat)/10000000.0)*10000000.0), lon };
+						LatpLon node(int(lat2latp(double(lat)/10000000.0)*10000000.0), lon);
 						nodes.insert_back(nodeId, node);
 						bool significant = false;
 						int kvStart = kvPos;

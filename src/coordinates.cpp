@@ -1,8 +1,28 @@
 #include <math.h>
 
-struct LatpLon {
+class LatpLon {
+public:
+	//Stxxl only supports plain old data types (POD)
 	int32_t latp;
 	int32_t lon;
+
+	LatpLon()
+	{
+		latp = 0;
+		lon = 0;
+	}
+	
+	LatpLon(int32_t latp, int32_t lon)
+	{
+		this->latp = latp;
+		this->lon = lon;
+	}
+
+	friend std::ostream& operator<< (std::ostream& stream, const LatpLon& obj) {
+		stream.write((const char *)&obj.latp, sizeof(int32_t));
+		stream.write((const char *)&obj.lon, sizeof(int32_t));
+		return stream;
+	}
 };
 
 double deg2rad(double deg) { return (M_PI/180.0) * deg; }
