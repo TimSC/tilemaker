@@ -215,7 +215,7 @@ int main(int argc, char* argv[]) {
 
 	class LayerDefinition layers(config.layers);
 	class ShpMemTiles shpTiles(config.baseZoom);
-	shpTiles.Load(layers, hasClippingBox, clippingBox);
+	shpTiles.Load(layers, hasClippingBox, clippingBox, config, luaFile);
 
 	// For each tile, objects to be used in processing
 

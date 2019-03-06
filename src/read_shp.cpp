@@ -1,4 +1,5 @@
 #include "read_shp.h"
+
 using namespace std;
 namespace geom = boost::geometry;
 
@@ -31,30 +32,79 @@ void fillPointArrayFromShapefile(vector<Point> *points, SHPObject *shape, uint p
 void setLayerColumnTypes(
 		DBFHandle &dbf, int layerNum,
 		const unordered_map<int,string> &columnMap, const unordered_map<int,int> &columnTypeMap,
-		class LayerDefinition &layers) {
+		class LayerDefinition &layers, OsmLuaProcessing &osmLuaProcessing) {
 
-	auto &attributeMap = layers.layers[layerNum].attributeMap;
-	for (auto it : columnMap) {
-		int pos = it.first;
-		string key = it.second;
-		auto iter = attributeMap.find(key);
-		auto ctmIter = columnTypeMap.find(pos);
-		if(ctmIter == columnTypeMap.end()) throw runtime_error("ctmIter is null");
-		int typeVal = 0;
-		switch (ctmIter->second) {
-			case 1:
-			     typeVal = 1;
-			     break;
-			case 2:
-			     typeVal = 1;
-			     break;
-			default:
-			     typeVal = 3;
-			     break;
+	if (osmLuaProcessing.canRemapShapefiles()) {
+		// Create table object
+		kaguya::LuaTable in_table = osmLuaProcessing.newTable();
+		for (auto it : columnMap) {
+			int pos = it.first;
+			string key = it.second;
+			auto it2 = columnTypeMap.find(pos);
+			switch (it2->second) {
+				case 1:  in_table[key] = DBFReadIntegerAttribute(dbf, recordNum, pos); break;
+				case 2:  in_table[key] =  DBFReadDoubleAttribute(dbf, recordNum, pos); break;
+				default: in_table[key] =  DBFReadStringAttribute(dbf, recordNum, pos); break;
+			}
 		}
-		if (iter != attributeMap.end() && iter->second != typeVal)
-			throw runtime_error("Type of column unexpectedly changed while loading shp");
-		attributeMap[key] = typeVal;
+
+		// Call remap function
+		kaguya::LuaTable out_table = osmLuaProcessing.remapAttributes(in_table);
+
+		// Write values to vector tiles
+		auto &attributeMap = layers.layers[layerNum].attributeMap;
+		for (auto key : out_table.keys()) {
+			kaguya::LuaRef val = out_table[key];
+			vector_tile::Tile_Value v;
+			auto iter = attributeMap.find(key);
+			int typeVal = 0;
+			if (val.isType<std::string>()) {
+				v.set_string_value(static_cast<std::string const&>(val));
+				typeVal = 0;
+			} else if (val.isType<int>()) {
+				v.set_int_value(val);
+				typeVal = 1;
+			} else if (val.isType<double>()) {
+				v.set_double_value(val);
+				typeVal = 1;
+			} else if (val.isType<bool>()) {
+				v.set_bool_value(val);
+				typeVal = 2;
+			} else {
+				// don't even think about trying to write nested tables, thank you
+				std::cout << "Didn't recognise Lua output type: " << val << std::endl;
+			}
+			if (iter != attributeMap.end() && iter->second != typeVal)
+				throw runtime_error("Type of column unexpectedly changed while loading shp");
+			attributeMap[key] = typeVal;
+			
+		}
+
+	} else {
+
+		auto &attributeMap = layers.layers[layerNum].attributeMap;
+		for (auto it : columnMap) {
+			int pos = it.first;
+			string key = it.second;
+			auto iter = attributeMap.find(key);
+			auto ctmIter = columnTypeMap.find(pos);
+			if(ctmIter == columnTypeMap.end()) throw runtime_error("ctmIter is null");
+			int typeVal = 0;
+			switch (ctmIter->second) {
+				case 1:
+					 typeVal = 1;
+					 break;
+				case 2:
+					 typeVal = 1;
+					 break;
+				default:
+					 typeVal = 3;
+					 break;
+			}
+			if (iter != attributeMap.end() && iter->second != typeVal)
+				throw runtime_error("Type of column unexpectedly changed while loading shp");
+			attributeMap[key] = typeVal;
+		}
 	}
 }
 
@@ -63,41 +113,86 @@ void addShapefileAttributes(
 		DBFHandle &dbf,
 		OutputObjectRef &oo,
 		int recordNum, const unordered_map<int,string> &columnMap, const unordered_map<int,int> &columnTypeMap,
-		const class LayerDefinition &layers) {
-
-	auto &attributeMap = layers.layers[oo->layer].attributeMap;
-	for (auto it : columnMap) {
-		int pos = it.first;
-		string key = it.second;
-		vector_tile::Tile_Value v;
-		auto iter = attributeMap.find(key);
-		auto ctmIter = columnTypeMap.find(pos);
-		if(ctmIter == columnTypeMap.end()) throw runtime_error("ctmIter is null");
-		int typeVal = 0;
-		switch (ctmIter->second) {
-			case FTInteger:  
-			         v.set_int_value(DBFReadIntegerAttribute(dbf, recordNum, pos));
-			         typeVal = 1;
-			         break;
-			case FTDouble:  
-			         v.set_double_value(DBFReadDoubleAttribute(dbf, recordNum, pos));
-			         typeVal = 1;
-			         break;
-			default: 
-			         v.set_string_value(DBFReadStringAttribute(dbf, recordNum, pos));
-			         typeVal = 3;
-			         break;
+		const class LayerDefinition &layers,
+		OsmLuaProcessing &osmLuaProcessing) 
+{
+	if (osmLuaProcessing.canRemapShapefiles()) {
+		// Create table object
+		kaguya::LuaTable in_table = osmLuaProcessing.newTable();
+		for (auto it : columnMap) {
+			int pos = it.first;
+			string key = it.second;
+			auto it2 = columnTypeMap.find(pos);
+			switch (it2->second) {
+				case 1:  in_table[key] = DBFReadIntegerAttribute(dbf, recordNum, pos); break;
+				case 2:  in_table[key] =  DBFReadDoubleAttribute(dbf, recordNum, pos); break;
+				default: in_table[key] =  DBFReadStringAttribute(dbf, recordNum, pos); break;
+			}
 		}
-		if (iter == attributeMap.end())
-			throw runtime_error("Column type missing while loading shp");
-		if (iter->second != typeVal)
-			throw runtime_error("Type of column unexpectedly changed while loading shp");
-		oo->addAttribute(key, v);
+
+		// Call remap function
+		kaguya::LuaTable out_table = osmLuaProcessing.remapAttributes(in_table);
+
+		// Write values to vector tiles
+		for (auto key : out_table.keys()) {
+			kaguya::LuaRef val = out_table[key];
+			vector_tile::Tile_Value v;
+			int typeVal = 0;
+			if (val.isType<std::string>()) {
+				v.set_string_value(static_cast<std::string const&>(val));
+				typeVal = 0;
+			} else if (val.isType<int>()) {
+				v.set_int_value(val);
+				typeVal = 1;
+			} else if (val.isType<double>()) {
+				v.set_double_value(val);
+				typeVal = 1;
+			} else if (val.isType<bool>()) {
+				v.set_bool_value(val);
+				typeVal = 2;
+			} else {
+				// don't even think about trying to write nested tables, thank you
+				std::cout << "Didn't recognise Lua output type: " << val << std::endl;
+			}
+			oo->addAttribute(key, v);
+		}
+
+	} else {
+		auto &attributeMap = layers.layers[oo->layer].attributeMap;
+		for (auto it : columnMap) {
+			int pos = it.first;
+			string key = it.second;
+			vector_tile::Tile_Value v;
+			auto iter = attributeMap.find(key);
+			auto ctmIter = columnTypeMap.find(pos);
+			if(ctmIter == columnTypeMap.end()) throw runtime_error("ctmIter is null");
+			int typeVal = 0;
+			switch (ctmIter->second) {
+				case FTInteger:  
+					     v.set_int_value(DBFReadIntegerAttribute(dbf, recordNum, pos));
+					     typeVal = 1;
+					     break;
+				case FTDouble:  
+					     v.set_double_value(DBFReadDoubleAttribute(dbf, recordNum, pos));
+					     typeVal = 1;
+					     break;
+				default: 
+					     v.set_string_value(DBFReadStringAttribute(dbf, recordNum, pos));
+					     typeVal = 0;
+					     break;
+			}
+			if (iter == attributeMap.end())
+				throw runtime_error("Column type missing while loading shp");
+			if (iter->second != typeVal)
+				throw runtime_error("Type of column unexpectedly changed while loading shp");
+			oo->addAttribute(key, v);
+		}
 	}
 }
 
 void prepareShapefile(class LayerDefinition &layers,
-                   uint baseZoom, uint layerNum) 
+                   uint baseZoom, uint layerNum, 
+				   OsmLuaProcessing &osmLuaProcessing) 
 {
 	DBFHandle dbf = nullptr;
 	try
@@ -129,7 +224,7 @@ void prepareShapefile(class LayerDefinition &layers,
 			}
 		}
 
-		setLayerColumnTypes(dbf, layerNum, columnMap, columnTypeMap, layers);
+		setLayerColumnTypes(dbf, layerNum, columnMap, columnTypeMap, layers, osmLuaProcessing);
 	}
 	catch(exception &err)
 	{
@@ -143,7 +238,8 @@ void prepareShapefile(class LayerDefinition &layers,
 void readShapefile(const Box &clippingBox, 
 				   const class LayerDefinition &layers,
                    uint baseZoom, uint layerNum,
-				   class TileIndexCached &outObj) 
+				   class TileIndexCached &outObj,
+				OsmLuaProcessing &osmLuaProcessing) 
 {
 	SHPHandle shp = nullptr;
 	DBFHandle dbf = nullptr;
@@ -217,7 +313,7 @@ void readShapefile(const Box &clippingBox,
 
 					OutputObjectRef oo = outObj.AddObject(layerNum, layerName, CACHED_POINT, p, isIndexed, hasName, name);
 
-					addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers);
+					addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers, osmLuaProcessing);
 				}
 
 			} else if (shapeType==3) {
@@ -238,7 +334,7 @@ void readShapefile(const Box &clippingBox,
 
 						OutputObjectRef oo = outObj.AddObject(layerNum, layerName, CACHED_LINESTRING, *it, isIndexed, hasName, name);
 
-						addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers);
+						addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers, osmLuaProcessing);
 					}
 				}
 
@@ -303,7 +399,7 @@ void readShapefile(const Box &clippingBox,
 					// create OutputObject
 					OutputObjectRef oo = outObj.AddObject(layerNum, layerName, CACHED_POLYGON, out, isIndexed, hasName, name);
 
-					addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers);
+					addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers, osmLuaProcessing);
 				}
 
 			} else {

@@ -4,6 +4,7 @@
 
 #include "tile_data.h"
 #include "shared_data.h"
+#include "osm_lua_processing.h"
 
 class ShpMemTiles : public TileDataSource
 {
@@ -23,10 +24,12 @@ public:
 
 	virtual void Load(class LayerDefinition &layers, 
 		bool hasClippingBox,
-		const Box &clippingBox);
+		const Box &clippingBox,
+		const class Config &config,
+		const std::string &luaFile);
 
 private:
-
+	
 	class TileIndexCached tileIndex;
 };
 

@@ -40,7 +40,9 @@ uint ShpMemTiles::GetBaseZoom()
 
 void ShpMemTiles::Load(class LayerDefinition &layers, 
 	bool hasClippingBox,
-	const Box &clippingBox)
+	const Box &clippingBox,
+	const class Config &config,
+	const std::string &luaFile)
 {
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
@@ -54,6 +56,11 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 			prepareShapefile(layers, tileIndex.GetBaseZoom(), layerNum);
 		}
 	}
+
+	class LayerDefinition layersTmp(layers);
+	OsmLuaProcessing osmLuaProcessing(config, layersTmp, luaFile, 
+		*this, 
+		*this);
 
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
@@ -69,7 +76,7 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 			readShapefile(projClippingBox,
 			              layers,
 			              tileIndex.GetBaseZoom(), layerNum,
-						  this->tileIndex);
+						  this->tileIndex, osmLuaProcessing);
 		}
 	}
 }
