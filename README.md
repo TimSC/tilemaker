@@ -103,6 +103,10 @@ You may load multiple .pbf files in one run (for example, adjoining counties). T
 
 The JSON configuration and Lua processing files are specified with --config and --process respectively. Defaults are config.json and process.lua in the current directory. If there is no config.json and process.lua in the current directory, and you do not specify --config and --process, an error will result.
 
+You can run on the included test data using:
+
+    tilemaker testdata/iow_os_opendata.pbf --config resources/config-testdata.json --process resources/process-openmaptiles.lua --output=tiles/
+
 You can get a run-down of available options with
 
     tilemaker --help
