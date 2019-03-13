@@ -7,14 +7,16 @@ namespace geom = boost::geometry;
 ShpDiskTiles::ShpDiskTiles(uint baseZoom, const class LayerDefinition &layers):
 	TileDataSource(),
 	layers(layers),
-	tileIndex(baseZoom)
+	tileIndex(baseZoom),
+	baseZoom(baseZoom)
 {
-
+	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
 }
 
 void ShpDiskTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
 {
-	tileIndex.GenerateTileList(zoom, dstCoords);
+	::GenerateTileListAtZoom(xMin, xMax, yMin, yMax, 
+		baseZoom, zoom, dstCoords);
 }
 
 void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom, 
@@ -54,24 +56,32 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 
 // Find intersecting shapefile layer
 // TODO: multipolygon relations not supported, will always return false
-vector<string> ShpDiskTiles::FindIntersecting(const string &layerName, Box &box) const {
+vector<string> ShpDiskTiles::FindIntersecting(const string &layerName, Box &box) const 
+{
 	vector<uint> ids = tileIndex.findIntersectingGeometries(layerName, box);
 	return tileIndex.namesOfGeometries(ids);
 }
 
-bool ShpDiskTiles::Intersects(const string &layerName, Box &box) const {
+bool ShpDiskTiles::Intersects(const string &layerName, Box &box) const 
+{
 	return !tileIndex.findIntersectingGeometries(layerName, box).empty();
 }
 
 uint ShpDiskTiles::GetBaseZoom()
 {
-	return tileIndex.GetBaseZoom();
+	return baseZoom;
 }
 
 void ShpDiskTiles::Load(class LayerDefinition &layers, 
 	bool hasClippingBox,
 	const Box &clippingBox)
 {
+	this->clippingBox = clippingBox;
+	this->xMin = lon2tilex(clippingBox.min_corner().get<0>(), baseZoom);
+	this->xMax = lon2tilex(clippingBox.max_corner().get<0>(), baseZoom)+1;
+	this->yMin = lat2tiley(clippingBox.max_corner().get<1>(), baseZoom)-1;
+	this->yMax = lat2tiley(clippingBox.min_corner().get<1>(), baseZoom);
+
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
 		const LayerDef &layer = layers.layers[layerNum];

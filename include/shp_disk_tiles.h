@@ -29,6 +29,9 @@ private:
 
 	const class LayerDefinition &layers;
 	class TileIndexCached tileIndex;
+	const uint baseZoom;
+	Box clippingBox;
+	int xMin, xMax, yMin, yMax;
 };
 
 #endif //_OSM_DISK_TILES

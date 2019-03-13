@@ -151,47 +151,8 @@ OsmDiskTiles::OsmDiskTiles(const std::string &basePath,
 
 void OsmDiskTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
 {
-	if (zoom==tilesZoom) {
-		// at native zoom level
-		for (int x=xMin; x<=xMax; x++)
-			for (int y=yMin; y<=yMax; y++)
-				dstCoords.insert(TileCoordinates(x, y));
-	} else {
-		// otherwise, we need to run through the native zoom list, and assign each way
-		// to a tile at our zoom level
-		if(zoom < tilesZoom)
-		{
-			int scale = pow(2, tilesZoom-zoom);
-			for (int x=xMin; x<=xMax; x++)
-			{
-				TileCoordinate tilex = x / scale;
-				for (int y=yMin; y<=yMax; y++)
-				{			
-					TileCoordinate tiley = y / scale;
-					TileCoordinates newIndex(tilex, tiley);
-					dstCoords.insert(newIndex);
-				}
-			}
-		}
-		else
-		{
-			int scale = pow(2, zoom-tilesZoom);
-			TileCoordinate xMinScaled = xMin * scale;
-			TileCoordinate xMaxScaled = (xMax+1) * scale;
-			TileCoordinate yMinScaled = yMin * scale;
-			TileCoordinate yMaxScaled = (yMax+1) * scale;
-			
-			for (int x=xMinScaled; x<xMaxScaled; x++)
-			{
-				for (int y=yMinScaled; y<yMaxScaled; y++)
-				{			
-					TileCoordinates newIndex(x, y);
-					dstCoords.insert(newIndex);
-				}
-			}
-		}
-
-	}
+	::GenerateTileListAtZoom(xMin, xMax, yMin, yMax, 
+		tilesZoom, zoom, dstCoords);
 }
 
 void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom, 
