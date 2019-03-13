@@ -45,6 +45,9 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
 		const LayerDef &layer = layers.layers[layerNum];
+		if(layer.indexed)
+			this->tileIndex.CreateNamedLayerIndex(layer.name);
+
 		if (layer.source.size()>0) {
 			if (!hasClippingBox) {
 				cerr << "Can't read shapefiles unless a bounding box is provided." << endl;
@@ -59,8 +62,6 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 	{
 		// External layer sources
 		const LayerDef &layer = layers.layers[layerNum];
-		if(layer.indexed)
-			this->tileIndex.CreateNamedLayerIndex(layer.name);
 
 		if (layer.source.size()>0) {
 			Box projClippingBox = Box(geom::make<Point>(clippingBox.min_corner().get<0>(), lat2latp(clippingBox.min_corner().get<1>())),

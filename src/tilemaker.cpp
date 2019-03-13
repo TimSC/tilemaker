@@ -43,7 +43,7 @@ typedef unsigned uint;
 #include "osm_mem_tiles.h"
 #include "osm_disk_tiles.h"
 #include "shp_mem_tiles.h"
-//#include "shp_disk_tiles.h"
+#include "shp_disk_tiles.h"
 
 // Namespaces
 using namespace std;
@@ -214,7 +214,7 @@ int main(int argc, char* argv[]) {
 	// ---- Load external shp files
 
 	class LayerDefinition layers(config.layers);
-	class ShpMemTiles shpTiles(config.baseZoom);
+	class ShpDiskTiles shpTiles(config.baseZoom, layers);
 	shpTiles.Load(layers, hasClippingBox, clippingBox);
 
 	// For each tile, objects to be used in processing
