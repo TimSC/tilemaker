@@ -8,6 +8,32 @@
 using namespace ClipperLib;
 using namespace std;
 
+const int MAX_BATCH_POINTS = 2000;
+
+size_t CountPtsMultiLinestring(const MultiLinestring &mls) 
+{
+	size_t count = 0;
+	for(size_t i=0; i<mls.size(); i++)
+		count += mls[i].size();
+	return count;
+}
+
+size_t CountPtsMultiPolygon (const MultiPolygon &mp) 
+{
+	size_t count = 0;
+	for(size_t i=0; i<mp.size(); i++)
+	{
+		const Polygon &p = mp[i];
+		count += p.outer().size();
+		auto &inners = p.inners();
+		for(size_t j=0; j<inners.size(); j++)
+			count += inners[j].size();
+	}
+	return count;
+}
+
+// *************************************
+
 void CheckNextObjectAndMerge(ObjectsAtSubLayerIterator &jt, const ObjectsAtSubLayerIterator &ooSameLayerEnd, 
 	class SharedData *sharedData, const TileBbox &bbox, Geometry &g)
 {
@@ -30,10 +56,12 @@ void CheckNextObjectAndMerge(ObjectsAtSubLayerIterator &jt, const ObjectsAtSubLa
 	
 		PolyTree current;
 		ConvertToClipper(*gAcc, current);
+		size_t totalPoints = CountPtsMultiPolygon(*gAcc);
 
 		while (jt+1 != ooSameLayerEnd &&
 				ooNext->geomType == gTyp &&
-				ooNext->attributes == oo->attributes) {
+				ooNext->attributes == oo->attributes &&
+				totalPoints < MAX_BATCH_POINTS) {
 			jt++;
 			oo = *jt;
 			if(jt+1 != ooSameLayerEnd) ooNext = *(jt+1);
@@ -42,6 +70,10 @@ void CheckNextObjectAndMerge(ObjectsAtSubLayerIterator &jt, const ObjectsAtSubLa
 			try {
 
 				MultiPolygon gNew = boost::get<MultiPolygon>(oo->buildWayGeometry(bbox));
+
+				size_t gNewPoints = CountPtsMultiPolygon(gNew);
+				totalPoints += gNewPoints;
+
 				PolyTree newShapes;
 				ConvertToClipper(gNew, newShapes);
 
@@ -71,10 +103,12 @@ void CheckNextObjectAndMerge(ObjectsAtSubLayerIterator &jt, const ObjectsAtSubLa
 			cerr << "Error: LineString " << oo->objectID << " has unexpected type" << endl;
 			return;
 		}
+		size_t totalPoints = CountPtsMultiLinestring(*gAcc);
 
 		while (jt+1 != ooSameLayerEnd &&
 				ooNext->geomType == gTyp &&
-				ooNext->attributes == oo->attributes) {
+				ooNext->attributes == oo->attributes &&
+				totalPoints < MAX_BATCH_POINTS) {
 			jt++;
 			oo = *jt;
 			if(jt+1 != ooSameLayerEnd) ooNext = *(jt+1);
@@ -83,6 +117,10 @@ void CheckNextObjectAndMerge(ObjectsAtSubLayerIterator &jt, const ObjectsAtSubLa
 			try
 			{
 				MultiLinestring gNew = boost::get<MultiLinestring>(oo->buildWayGeometry(bbox));
+
+				size_t gNewPoints = CountPtsMultiLinestring(gNew);
+				totalPoints += gNewPoints;
+
 				MultiLinestring gTmp;
 				geom::union_(*gAcc, gNew, gTmp);
 				*gAcc = move(gTmp);
