@@ -30,12 +30,26 @@ void prepareShapefile(const std::string &filename,
 		const std::vector<std::string> &columns,
 		class ShapeFileResultsDecoder &outObj);
 
-/// Read shapefile, and produce call back events for all objects within the specified bounding box
-void readShapefile(const Box &clippingBox,
-					const std::string &filename,
+class ShapefileReader
+{
+private:
+	SHPHandle shp;
+	DBFHandle dbf;
+	std::unordered_map<int, std::string> columnMap;
+	std::unordered_map<int, int> columnTypeMap;
+	int indexField;
+	int numEntities, shpType;
+	double adfMinBound[4], adfMaxBound[4];
+
+public:
+	ShapefileReader(const std::string &filename, 					
 					const std::vector<std::string> &columns,
-					const std::string &indexName,
-					class ShapeFileResultsDecoder &outObj);
+					const std::string &indexName);
+	virtual ~ShapefileReader();	
+
+	// produce call back events for all objects within the specified bounding box
+	void ReadAll(const Box &clippingBox, class ShapeFileResultsDecoder &outObj);
+};
 
 #endif //_READ_SHP_H
 

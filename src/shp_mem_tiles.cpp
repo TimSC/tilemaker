@@ -77,14 +77,11 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 			const vector<string> &columns = layer.sourceColumns;
 			const string &indexName = layer.indexName;
 
-			readShapefile(projClippingBox,
-			              filename,
+			class ShapefileReader shapefileReader(filename,
 						  columns,
-			              indexName,
-						  converter);
+			              indexName);
+			shapefileReader.ReadAll(projClippingBox, converter);
 		}
 	}
 }
-
-
 
