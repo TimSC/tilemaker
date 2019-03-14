@@ -64,14 +64,14 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 	}
 
 	ShapeFileToTileIndexCached converter(this->tileIndex, layers);
+	Box projClippingBox = Box(geom::make<Point>(clippingBox.min_corner().get<0>(), lat2latp(clippingBox.min_corner().get<1>())),
+	              geom::make<Point>(clippingBox.max_corner().get<0>(), lat2latp(clippingBox.max_corner().get<1>())));
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
 		// External layer sources
 		const LayerDef &layer = layers.layers[layerNum];
 
 		if (layer.source.size()>0) {
-			Box projClippingBox = Box(geom::make<Point>(clippingBox.min_corner().get<0>(), lat2latp(clippingBox.min_corner().get<1>())),
-			              geom::make<Point>(clippingBox.max_corner().get<0>(), lat2latp(clippingBox.max_corner().get<1>())));
 			converter.layerNum = layerNum;
 			const string &filename = layer.source;
 			const vector<string> &columns = layer.sourceColumns;
@@ -85,4 +85,6 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 		}
 	}
 }
+
+
 

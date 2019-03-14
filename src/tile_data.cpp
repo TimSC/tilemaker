@@ -3,7 +3,6 @@
 #include "tile_data.h"
 #include "shared_data.h"
 using namespace std;
-namespace geom = boost::geometry;
 
 typedef std::pair<OutputObjectsConstIt,OutputObjectsConstIt> OutputObjectsConstItPair;
 
@@ -143,9 +142,69 @@ void TileIndex::AddByPolyline(OutputObjectRef &oo, Geometry *geom) {
 	}
 }
 
+// ****************************************
+
+BareTileIndex::BareTileIndex(const uint baseZoom):
+	baseZoom(baseZoom)
+{
+
+}
+
+BareTileIndex::~BareTileIndex()
+{
+
+}
+
+void BareTileIndex::AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+	enum OutputGeometryType geomType, uint id,
+	const geom::model::box<Point> &box, bool hasName, const std::string &name)
+{
+	const string &layerName = layer.name;
+	bool isIndexed = layer.indexed;
+
+	if(isIndexed)
+	{
+		indices.at(layerName).insert(std::make_pair(box, id));
+		if(hasName)
+			cachedGeometryNames[id]=name;
+	}
+}
+
+vector<IndexValue> BareTileIndex::findIntersectingGeometries(const string &layerName, Box &box) const 
+{
+	vector<IndexValue> results;
+	vector<uint> ids;
+
+	auto f = indices.find(layerName);
+	if (f==indices.end()) {
+		cerr << "Couldn't find indexed layer " << layerName << endl;
+		return vector<IndexValue>();	// empty, relations not supported
+	}
+
+	f->second.query(geom::index::intersects(box), back_inserter(results));
+	return results;
+}
+
+vector<string> BareTileIndex::namesOfGeometries(vector<uint> &ids) const 
+{
+	vector<string> names;
+	for (uint i=0; i<ids.size(); i++) {
+		if (cachedGeometryNames.find(ids[i])!=cachedGeometryNames.end()) {
+			names.push_back(cachedGeometryNames.at(ids[i]));
+		}
+	}
+	return names;
+}
+
+void BareTileIndex::CreateNamedLayerIndex(const std::string &layerName)
+{
+	indices[layerName]=RTree();
+}
+
 // ***************************************
 
-TileIndexCached::TileIndexCached(uint baseZoom) : TileIndex(baseZoom)
+TileIndexCached::TileIndexCached(uint baseZoom) : TileIndex(baseZoom),
+	bareTileIndex(baseZoom)
 {
 
 }
@@ -159,9 +218,6 @@ void TileIndexCached::AddObject(const class LayerDef &layer, uint_least8_t layer
 	enum OutputGeometryType geomType,
 	Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals)
 {
-	const string &layerName = layer.name;
-	bool isIndexed = layer.indexed;
-
 	geom::model::box<Point> box;
 	geom::envelope(geometry, box);
 
@@ -169,14 +225,11 @@ void TileIndexCached::AddObject(const class LayerDef &layer, uint_least8_t layer
 	cachedGeometries.push_back(g);
 	uint id = cachedGeometries.size() - 1;
 
-	if(isIndexed)
-	{
-		indices.at(layerName).insert(std::make_pair(box, id));
-		if(hasName)
-			cachedGeometryNames[id]=name;
-	}
+	this->bareTileIndex.AddObject(layer, layerNum,
+		geomType, id,
+		box, hasName, name);
 
-	OutputObjectRef oo = std::make_shared<OutputObjectCached>(geomType, layerNum, cachedGeometries.size()-1, g);
+	OutputObjectRef oo = std::make_shared<OutputObjectCached>(geomType, layerNum, id, g);
 
 	Point *p = nullptr;
 	switch(geomType)
@@ -202,18 +255,10 @@ void TileIndexCached::AddObject(const class LayerDef &layer, uint_least8_t layer
 	oo->AddAttributes(keyVals);
 }
 
-vector<uint> TileIndexCached::findIntersectingGeometries(const string &layerName, Box &box) const {
-	vector<IndexValue> results;
-	vector<uint> ids;
-
-	auto f = indices.find(layerName);
-	if (f==indices.end()) {
-		cerr << "Couldn't find indexed layer " << layerName << endl;
-		return vector<uint>();	// empty, relations not supported
-	}
-
-	f->second.query(geom::index::intersects(box), back_inserter(results));
-	return verifyIntersectResults(results,box.min_corner(),box.max_corner());
+vector<uint> TileIndexCached::findIntersectingGeometries(const string &layerName, Box &box) const 
+{
+	vector<IndexValue> candidates = this->bareTileIndex.findIntersectingGeometries(layerName, box);
+	return verifyIntersectResults(candidates, box.min_corner(),box.max_corner());
 }
 
 vector<uint> TileIndexCached::verifyIntersectResults(vector<IndexValue> &results, Point &p1, Point &p2) const {
@@ -227,18 +272,40 @@ vector<uint> TileIndexCached::verifyIntersectResults(vector<IndexValue> &results
 }
 
 vector<string> TileIndexCached::namesOfGeometries(vector<uint> &ids) const {
-	vector<string> names;
-	for (uint i=0; i<ids.size(); i++) {
-		if (cachedGeometryNames.find(ids[i])!=cachedGeometryNames.end()) {
-			names.push_back(cachedGeometryNames.at(ids[i]));
-		}
-	}
-	return names;
+	return this->bareTileIndex.namesOfGeometries(ids);
 }
 
 void TileIndexCached::CreateNamedLayerIndex(const std::string &layerName)
 {
-	indices[layerName]=RTree();
+	this->bareTileIndex.CreateNamedLayerIndex(layerName);
+}
+
+// **********************************************
+
+ShapeFileToBareTileIndex::ShapeFileToBareTileIndex(class BareTileIndex &out, const class LayerDefinition &layers):
+	ShapeFileResultsDecoder(),
+	out(out),
+	layers(layers)
+{
+	layerNum = 0;
+
+}
+
+ShapeFileToBareTileIndex::~ShapeFileToBareTileIndex()
+{
+
+}
+
+void ShapeFileToBareTileIndex::AddObject(int i, enum OutputGeometryType geomType,
+	Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals)
+{
+	const LayerDef &layer = this->layers.layers[layerNum];
+
+	geom::model::box<Point> box;
+	geom::envelope(geometry, box);
+	this->out.AddObject(layer, layerNum,
+		geomType, i,
+		box, hasName, name);
 }
 
 // *********************************************
@@ -257,7 +324,7 @@ ShapeFileToTileIndexCached::~ShapeFileToTileIndexCached()
 
 }
 
-void ShapeFileToTileIndexCached::AddObject(enum OutputGeometryType geomType,
+void ShapeFileToTileIndexCached::AddObject(int i, enum OutputGeometryType geomType,
 	Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals)
 {
 	const LayerDef &layer = this->layers.layers[layerNum];

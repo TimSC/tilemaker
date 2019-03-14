@@ -27,8 +27,11 @@ public:
 
 private:
 
+	std::vector<uint> verifyIntersectResults(std::vector<IndexValue> &results, Point &p1, Point &p2) const;
+
 	const class LayerDefinition &layers;
 	class TileIndexCached tileIndex;
+	class BareTileIndex bareTileIndex;
 	const uint baseZoom;
 	Box clippingBox;
 	int xMin, xMax, yMin, yMax;

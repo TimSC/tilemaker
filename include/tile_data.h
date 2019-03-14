@@ -9,6 +9,8 @@
 #include "output_object.h"
 #include "read_shp.h"
 
+namespace geom = boost::geometry;
+
 typedef std::vector<OutputObjectRef>::const_iterator OutputObjectsConstIt;
 typedef std::map<TileCoordinates, std::vector<OutputObjectRef>, TileCoordinatesCompare > TileIndexRaw;
 typedef std::set<TileCoordinates, TileCoordinatesCompare> TileCoordinatesSet;
@@ -38,6 +40,25 @@ private:
 
 // ***********************************
 
+class BareTileIndex
+{
+public:
+	BareTileIndex(const uint baseZoom);
+	virtual ~BareTileIndex();
+
+	void AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+		enum OutputGeometryType geomType, uint id,
+		const geom::model::box<Point> &box, bool hasName, const std::string &name);
+
+	std::vector<IndexValue> findIntersectingGeometries(const std::string &layerName, Box &box) const;
+	std::vector<std::string> namesOfGeometries(std::vector<uint> &ids) const;
+	void CreateNamedLayerIndex(const std::string &layerName);
+
+	std::map<uint, std::string> cachedGeometryNames;			//  | optional names for each one
+	std::map<std::string, RTree> indices;			// Spatial indices, boost::geometry::index objects for shapefile indices
+	const uint baseZoom;
+};
+
 class TileIndexCached : public TileIndex
 {
 public:
@@ -48,19 +69,34 @@ public:
 		enum OutputGeometryType geomType,
 		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals);
 	
-	std::vector<std::shared_ptr<Geometry> > cachedGeometries;   // prepared boost::geometry objects (from shapefiles)
-	std::map<uint, std::string> cachedGeometryNames;			//  | optional names for each one
-	std::map<std::string, RTree> indices;			// Spatial indices, boost::geometry::index objects for shapefile indices
-
+	std::vector<uint> findIntersectingGeometries(const std::string &layerName, Box &box) const;
+	std::vector<std::string> namesOfGeometries(std::vector<uint> &ids) const;
+	std::vector<uint> verifyIntersectResults(std::vector<IndexValue> &results, Point &p1, Point &p2) const;
 	void CreateNamedLayerIndex(const std::string &layerName);
 
-	std::vector<uint> findIntersectingGeometries(const std::string &layerName, Box &box) const;
-	std::vector<uint> verifyIntersectResults(std::vector<IndexValue> &results, Point &p1, Point &p2) const;
-	std::vector<std::string> namesOfGeometries(std::vector<uint> &ids) const;
-
+	class BareTileIndex bareTileIndex;
+	std::vector<std::shared_ptr<Geometry> > cachedGeometries;   // prepared boost::geometry objects (from shapefiles)
 };
 
 // ***********************************
+
+class ShapeFileToBareTileIndex : public ShapeFileResultsDecoder
+{
+public:
+	ShapeFileToBareTileIndex(class BareTileIndex &out, const class LayerDefinition &layers);
+	virtual ~ShapeFileToBareTileIndex();
+
+	virtual void AddObject(int i, enum OutputGeometryType geomType,
+		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals);
+
+	virtual void FoundColumn(const std::string &key, int typeVal) {};
+
+	int layerNum;
+
+private:
+	class BareTileIndex &out;
+	const class LayerDefinition &layers;
+};
 
 class ShapeFileToTileIndexCached : public ShapeFileResultsDecoder
 {
@@ -68,7 +104,7 @@ public:
 	ShapeFileToTileIndexCached(class TileIndexCached &out, const class LayerDefinition &layers);
 	virtual ~ShapeFileToTileIndexCached();
 
-	virtual void AddObject(enum OutputGeometryType geomType,
+	virtual void AddObject(int i, enum OutputGeometryType geomType,
 		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals);
 
 	virtual void FoundColumn(const std::string &key, int typeVal) {};
@@ -192,7 +228,7 @@ public:
 	ShapeFileToLayers(class LayerDefinition &layers);
 	virtual ~ShapeFileToLayers();
 
-	virtual void AddObject(enum OutputGeometryType geomType,
+	virtual void AddObject(int i, enum OutputGeometryType geomType,
 		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals) {};
 
 	virtual void FoundColumn(const std::string &key, int typeVal);

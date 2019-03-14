@@ -20,7 +20,7 @@ public:
 	ShapeFileResultsDecoder() {};
 	virtual ~ShapeFileResultsDecoder() {};	
 
-	virtual void AddObject(enum OutputGeometryType geomType,
+	virtual void AddObject(int i, enum OutputGeometryType geomType,
 		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals) {};
 
 	virtual void FoundColumn(const std::string &key, int typeVal) {};

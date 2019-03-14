@@ -189,7 +189,7 @@ void readShapefile(const Box &clippingBox,
 					map<string, ShpFieldValue> keyVals;
 					GetShapefileAttributes(dbf, i, columnMap, columnTypeMap, keyVals);
 
-					outObj.AddObject(CACHED_POINT, p, hasName, name, keyVals);
+					outObj.AddObject(i, CACHED_POINT, p, hasName, name, keyVals);
 				}
 
 			} else if (shapeType==3) {
@@ -211,7 +211,7 @@ void readShapefile(const Box &clippingBox,
 						map<string, ShpFieldValue> keyVals;
 						GetShapefileAttributes(dbf, i, columnMap, columnTypeMap, keyVals);
 
-						outObj.AddObject(CACHED_LINESTRING, *it, hasName, name, keyVals);
+						outObj.AddObject(i, CACHED_LINESTRING, *it, hasName, name, keyVals);
 					}
 				}
 
@@ -277,7 +277,7 @@ void readShapefile(const Box &clippingBox,
 					GetShapefileAttributes(dbf, i, columnMap, columnTypeMap, keyVals);
 
 					// create OutputObject
-					outObj.AddObject(CACHED_POLYGON, out, hasName, name, keyVals);
+					outObj.AddObject(i, CACHED_POLYGON, out, hasName, name, keyVals);
 				}
 
 			} else {

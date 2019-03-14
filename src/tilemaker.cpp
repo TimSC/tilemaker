@@ -215,6 +215,7 @@ int main(int argc, char* argv[]) {
 
 	class LayerDefinition layers(config.layers);
 	class ShpDiskTiles shpTiles(config.baseZoom, layers);
+	//class ShpMemTiles shpTiles(config.baseZoom);
 	shpTiles.Load(layers, hasClippingBox, clippingBox);
 
 	// For each tile, objects to be used in processing

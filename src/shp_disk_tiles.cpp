@@ -8,6 +8,7 @@ ShpDiskTiles::ShpDiskTiles(uint baseZoom, const class LayerDefinition &layers):
 	TileDataSource(),
 	layers(layers),
 	tileIndex(baseZoom),
+	bareTileIndex(baseZoom),
 	baseZoom(baseZoom)
 {
 	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
@@ -34,7 +35,7 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 	{
 		const LayerDef &layer = layers.layers[layerNum];
 		if(layer.indexed)
-			this->tileIndex.CreateNamedLayerIndex(layer.name);
+			tmpTileIndex.CreateNamedLayerIndex(layer.name);
 	}
 
 	ShapeFileToTileIndexCached converter(tmpTileIndex, layers);
@@ -64,13 +65,17 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 // TODO: multipolygon relations not supported, will always return false
 vector<string> ShpDiskTiles::FindIntersecting(const string &layerName, Box &box) const 
 {
-	vector<uint> ids = tileIndex.findIntersectingGeometries(layerName, box);
-	return tileIndex.namesOfGeometries(ids);
+	vector<IndexValue> candidates = this->bareTileIndex.findIntersectingGeometries(layerName, box);
+	vector<uint> ids = this->verifyIntersectResults(candidates, box.min_corner(), box.max_corner());
+
+	return this->bareTileIndex.namesOfGeometries(ids);
 }
 
 bool ShpDiskTiles::Intersects(const string &layerName, Box &box) const 
 {
-	return !tileIndex.findIntersectingGeometries(layerName, box).empty();
+	vector<IndexValue> candidates = this->bareTileIndex.findIntersectingGeometries(layerName, box);
+	vector<uint> v = this->verifyIntersectResults(candidates, box.min_corner(), box.max_corner());
+	return !v.empty();
 }
 
 uint ShpDiskTiles::GetBaseZoom()
@@ -109,6 +114,29 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 		}
 	}
 
+	//Read shapefile layer into a simple index
+	ShapeFileToBareTileIndex converterBareTileIndex(this->bareTileIndex, layers);
+	Box projClippingBox = Box(geom::make<Point>(clippingBox.min_corner().get<0>(), lat2latp(clippingBox.min_corner().get<1>())),
+				  geom::make<Point>(clippingBox.max_corner().get<0>(), lat2latp(clippingBox.max_corner().get<1>())));
+	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
+	{
+		// External layer sources
+		const LayerDef &layer = layers.layers[layerNum];
+
+		if (layer.source.size()>0) {
+			converterBareTileIndex.layerNum = layerNum;
+			const string &filename = layer.source;
+			const vector<string> &columns = layer.sourceColumns;
+			const string &indexName = layer.indexName;
+
+			readShapefile(projClippingBox,
+						  filename,
+						  columns,
+						  indexName,
+						  converterBareTileIndex);
+		}
+	}
+
 	//TODO remove this up front loading of shapefile data
 	ShapeFileToTileIndexCached converter(this->tileIndex, layers);
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
@@ -117,8 +145,6 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 		const LayerDef &layer = layers.layers[layerNum];
 
 		if (layer.source.size()>0) {
-			Box projClippingBox = Box(geom::make<Point>(clippingBox.min_corner().get<0>(), lat2latp(clippingBox.min_corner().get<1>())),
-						  geom::make<Point>(clippingBox.max_corner().get<0>(), lat2latp(clippingBox.max_corner().get<1>())));
 			converter.layerNum = layerNum;
 			const string &filename = layer.source;
 			const vector<string> &columns = layer.sourceColumns;
@@ -131,5 +157,11 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 						  converter);
 		}
 	}
+}
+
+std::vector<uint> ShpDiskTiles::verifyIntersectResults(std::vector<IndexValue> &results, Point &p1, Point &p2) const
+{
+	//TODO replace this tricky function
+	return this->tileIndex.verifyIntersectResults(results, p1, p2);
 }
 
