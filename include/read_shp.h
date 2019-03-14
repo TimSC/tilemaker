@@ -8,12 +8,22 @@
 #include <map>
 #include "geomtypes.h"
 #include "output_object.h"
-#include "osm_lua_processing.h"
+#include "layer.h"
 
 // Shapelib
 #include "shapefil.h"
 
-void fillPointArrayFromShapefile(std::vector<Point> *points, SHPObject *shape, uint part);
+class ShapeFileResultsDecoder
+{
+public:
+	ShapeFileResultsDecoder() {};
+	virtual ~ShapeFileResultsDecoder() {};	
+
+	virtual OutputObjectRef AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+		enum OutputGeometryType geomType,
+		Geometry geometry, bool hasName, const std::string &name) 
+		{OutputObjectRef empty; return empty;};
+};
 
 void prepareShapefile(class LayerDefinition &layers,
                    uint baseZoom, uint layerNum);
@@ -22,7 +32,7 @@ void prepareShapefile(class LayerDefinition &layers,
 void readShapefile(const Box &clippingBox,
                    const class LayerDefinition &layers,
                    uint baseZoom, uint layerNum,
-				   class TileIndexCached &outObj);
+				   class ShapeFileResultsDecoder &outObj);
 
 #endif //_READ_SHP_H
 

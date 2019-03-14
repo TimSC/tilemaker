@@ -25,6 +25,11 @@ public:
 		bool hasClippingBox,
 		const Box &clippingBox);
 
+	// Used while shapefile is loading
+	OutputObjectRef AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+		enum OutputGeometryType geomType,
+		Geometry geometry, bool hasName, const std::string &name);
+
 private:
 
 	const class LayerDefinition &layers;

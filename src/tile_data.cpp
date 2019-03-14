@@ -1,12 +1,14 @@
 #include <algorithm>
 #include <iostream>
 #include "tile_data.h"
+#include "shared_data.h"
 using namespace std;
 namespace geom = boost::geometry;
 
 typedef std::pair<OutputObjectsConstIt,OutputObjectsConstIt> OutputObjectsConstItPair;
 
 TileIndex::TileIndex(uint baseZoom):
+	ShapeFileResultsDecoder(),
 	baseZoom(baseZoom)
 {
 
@@ -154,10 +156,13 @@ TileIndexCached::~TileIndexCached()
 
 }
 
-OutputObjectRef TileIndexCached::AddObject(uint_least8_t layerNum,
-	const std::string &layerName, enum OutputGeometryType geomType,
-	Geometry geometry, bool isIndexed, bool hasName, const std::string &name)
+OutputObjectRef TileIndexCached::AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+	enum OutputGeometryType geomType,
+	Geometry geometry, bool hasName, const std::string &name)
 {
+	const string &layerName = layer.name;
+	bool isIndexed = layer.indexed;
+
 	geom::model::box<Point> box;
 	geom::envelope(geometry, box);
 
@@ -405,3 +410,17 @@ void GenerateTileListAtZoom(int xMin, int xMax, int yMin, int yMax,
 
 	}
 }
+
+// ******************************************************
+
+TileDataSource::TileDataSource():
+	ShapeFileResultsDecoder()
+{
+
+}
+
+TileDataSource::~TileDataSource()
+{
+
+}
+

@@ -1,4 +1,6 @@
 #include "read_shp.h"
+#include <iostream>
+
 using namespace std;
 namespace geom = boost::geometry;
 
@@ -143,7 +145,7 @@ void prepareShapefile(class LayerDefinition &layers,
 void readShapefile(const Box &clippingBox, 
 				   const class LayerDefinition &layers,
                    uint baseZoom, uint layerNum,
-				   class TileIndexCached &outObj) 
+				   class ShapeFileResultsDecoder &outObj) 
 {
 	SHPHandle shp = nullptr;
 	DBFHandle dbf = nullptr;
@@ -153,8 +155,6 @@ void readShapefile(const Box &clippingBox,
 		const LayerDef &layer = layers.layers[layerNum];
 		const string &filename = layer.source;
 		const vector<string> &columns = layer.sourceColumns;
-		const string &layerName = layer.name;
-		bool isIndexed = layer.indexed;
 		const string &indexName = layer.indexName;
 
 		// open shapefile
@@ -215,7 +215,7 @@ void readShapefile(const Box &clippingBox,
 					bool hasName = false;
 					if (indexField>-1) { name=DBFReadStringAttribute(dbf, i, indexField); hasName = true;}
 
-					OutputObjectRef oo = outObj.AddObject(layerNum, layerName, CACHED_POINT, p, isIndexed, hasName, name);
+					OutputObjectRef oo = outObj.AddObject(layer, layerNum, CACHED_POINT, p, hasName, name);
 
 					addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers);
 				}
@@ -236,7 +236,7 @@ void readShapefile(const Box &clippingBox,
 						bool hasName = false;
 						if (indexField>-1) { name=DBFReadStringAttribute(dbf, i, indexField); hasName = true;}
 
-						OutputObjectRef oo = outObj.AddObject(layerNum, layerName, CACHED_LINESTRING, *it, isIndexed, hasName, name);
+						OutputObjectRef oo = outObj.AddObject(layer, layerNum, CACHED_LINESTRING, *it, hasName, name);
 
 						addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers);
 					}
@@ -301,7 +301,7 @@ void readShapefile(const Box &clippingBox,
 					if (indexField>-1) { name=DBFReadStringAttribute(dbf, i, indexField); hasName = true;}
 
 					// create OutputObject
-					OutputObjectRef oo = outObj.AddObject(layerNum, layerName, CACHED_POLYGON, out, isIndexed, hasName, name);
+					OutputObjectRef oo = outObj.AddObject(layer, layerNum, CACHED_POLYGON, out, hasName, name);
 
 					addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers);
 				}

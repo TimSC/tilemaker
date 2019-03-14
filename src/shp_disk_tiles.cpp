@@ -111,9 +111,15 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 			readShapefile(projClippingBox,
 			              layers,
 			              tileIndex.GetBaseZoom(), layerNum,
-						  this->tileIndex);
+						  *this);
 		}
 	}
 }
 
+OutputObjectRef ShpDiskTiles::AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+	enum OutputGeometryType geomType,
+	Geometry geometry, bool hasName, const std::string &name)
+{
+	return this->tileIndex.AddObject(layer, layerNum, geomType, geometry, hasName, name);
+}
 

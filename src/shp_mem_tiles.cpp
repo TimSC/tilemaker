@@ -75,5 +75,3 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 	}
 }
 
-
-

@@ -7,12 +7,13 @@
 #include <vector>
 #include <memory>
 #include "output_object.h"
+#include "read_shp.h"
 
 typedef std::vector<OutputObjectRef>::const_iterator OutputObjectsConstIt;
 typedef std::map<TileCoordinates, std::vector<OutputObjectRef>, TileCoordinatesCompare > TileIndexRaw;
 typedef std::set<TileCoordinates, TileCoordinatesCompare> TileCoordinatesSet;
 
-class TileIndex
+class TileIndex : public ShapeFileResultsDecoder
 {
 public:
 	TileIndex(uint baseZoom);
@@ -43,9 +44,9 @@ public:
 	TileIndexCached(uint baseZoom);
 	virtual ~TileIndexCached();
 
-	OutputObjectRef AddObject(uint_least8_t layerNum,
-		const std::string &layerName, enum OutputGeometryType geomType,
-		Geometry geometry, bool isIndexed, bool hasName, const std::string &name);
+	OutputObjectRef AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+		enum OutputGeometryType geomType,
+		Geometry geometry, bool hasName, const std::string &name);
 	
 	std::vector<std::shared_ptr<Geometry> > cachedGeometries;   // prepared boost::geometry objects (from shapefiles)
 	std::map<uint, std::string> cachedGeometryNames;			//  | optional names for each one
@@ -61,10 +62,12 @@ public:
 
 // ***********************************
 
-
-class TileDataSource
+class TileDataSource : public ShapeFileResultsDecoder
 {
 public:
+	TileDataSource();
+	virtual ~TileDataSource();
+
 	///This must be thread safe!
 	virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)=0;
 
@@ -82,7 +85,7 @@ public:
 		return false;
 	};
 
-	//Used in OSM data loading
+	///Used in OSM data loading
 	virtual void AddObject(TileCoordinates tileIndex, OutputObjectRef oo) {};
 
 	virtual uint GetBaseZoom()=0;
