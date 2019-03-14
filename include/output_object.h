@@ -14,9 +14,7 @@
 // Protobuf
 #include "osmformat.pb.h"
 #include "vector_tile.pb.h"
-
-///\brief Specifies geometry type for an OutputObject
-enum OutputGeometryType { POINT, LINESTRING, POLYGON, CENTROID, CACHED_POINT, CACHED_LINESTRING, CACHED_POLYGON };
+#include "read_shp.h"
 
 class ClipGeometryVisitor : public boost::static_visitor<Geometry> {
 
@@ -52,9 +50,9 @@ public:
 	OutputObject(OutputGeometryType type, uint_least8_t l, NodeID id);
 	virtual ~OutputObject();	
 
-	void addAttribute(const std::string &key, vector_tile::Tile_Value &value);
+	virtual void addAttribute(const std::string &key, vector_tile::Tile_Value &value);
 
-	bool hasAttribute(const std::string &key) const;
+	virtual bool hasAttribute(const std::string &key) const;
 
 	/** \brief Assemble a linestring or polygon into a Boost geometry, and clip to bounding box
 	 * Returns a boost::variant -
@@ -66,14 +64,16 @@ public:
 	virtual LatpLon buildNodeGeometry(const TileBbox &bbox) const = 0;
 	
 	//\brief Write attribute key/value pairs (dictionary-encoded)
-	void writeAttributes(std::vector<std::string> *keyList, std::vector<vector_tile::Tile_Value> *valueList, vector_tile::Tile_Feature *featurePtr) const;
+	virtual void writeAttributes(std::vector<std::string> *keyList, std::vector<vector_tile::Tile_Value> *valueList, vector_tile::Tile_Feature *featurePtr) const;
 	
 	/**
 	 * \brief Find a value in the value dictionary
 	 * (we can't easily use find() because of the different value-type encoding - 
 	 *  should be possible to improve this though)
 	 */
-	int findValue(std::vector<vector_tile::Tile_Value> *valueList, vector_tile::Tile_Value *value) const;
+	virtual int findValue(std::vector<vector_tile::Tile_Value> *valueList, vector_tile::Tile_Value *value) const;
+
+	virtual void AddAttributes(const ShpFieldValueMap &keyVals);
 };
 
 /**

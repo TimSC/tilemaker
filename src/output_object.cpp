@@ -75,6 +75,33 @@ Geometry ClipGeometryVisitor::operator()(const MultiPolygon &mp) const {
 
 // **********************************************************
 
+class GetTileValueVisitor : public boost::static_visitor<vector_tile::Tile_Value>
+{
+public:
+	vector_tile::Tile_Value operator()(int i) const
+	{
+		vector_tile::Tile_Value v;
+		v.set_int_value(i);
+		return v;
+	}
+
+	vector_tile::Tile_Value operator()(std::string str) const
+	{
+		vector_tile::Tile_Value v;
+		v.set_string_value(str);
+		return v;
+	}
+
+	vector_tile::Tile_Value operator()(double d) const
+	{
+		vector_tile::Tile_Value v;
+		v.set_double_value(d);
+		return v;
+	}
+};
+
+// **********************************************************
+
 OutputObject::OutputObject(OutputGeometryType type, uint_least8_t l, NodeID id) {
 	geomType = type;
 	layer = l;
@@ -135,6 +162,19 @@ int OutputObject::findValue(vector<vector_tile::Tile_Value> *valueList, vector_t
 		if (v.has_bool_value()   && value->has_bool_value()   && v.bool_value()  ==value->bool_value()  ) { return i; }
 	}
 	return -1;
+}
+
+// Read requested attributes from a shapefile, and encode into an OutputObject
+void OutputObject::AddAttributes(const ShpFieldValueMap &keyVals) 
+{
+	GetTileValueVisitor getTileValue;
+
+	for (auto it : keyVals) {
+		const string &key = it.first;
+		const ShpFieldValue &value = it.second;
+		vector_tile::Tile_Value v = boost::apply_visitor(getTileValue, value);
+		this->addAttribute(key, v);
+	}
 }
 
 // Comparision functions

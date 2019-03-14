@@ -44,9 +44,9 @@ public:
 	TileIndexCached(uint baseZoom);
 	virtual ~TileIndexCached();
 
-	OutputObjectRef AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+	void AddObject(const class LayerDef &layer, uint_least8_t layerNum,
 		enum OutputGeometryType geomType,
-		Geometry geometry, bool hasName, const std::string &name);
+		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals);
 	
 	std::vector<std::shared_ptr<Geometry> > cachedGeometries;   // prepared boost::geometry objects (from shapefiles)
 	std::map<uint, std::string> cachedGeometryNames;			//  | optional names for each one

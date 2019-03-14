@@ -1,4 +1,5 @@
 #include "read_shp.h"
+#include "coordinates.h"
 #include <iostream>
 
 using namespace std;
@@ -61,40 +62,28 @@ void setLayerColumnTypes(
 }
 
 // Read requested attributes from a shapefile, and encode into an OutputObject
-void addShapefileAttributes(
-		DBFHandle &dbf,
-		OutputObjectRef &oo,
-		int recordNum, const unordered_map<int,string> &columnMap, const unordered_map<int,int> &columnTypeMap,
-		const class LayerDefinition &layers) {
-
-	auto &attributeMap = layers.layers[oo->layer].attributeMap;
+void GetShapefileAttributes(DBFHandle &dbf,
+		int recordNum, const unordered_map<int,string> &columnMap,
+		const unordered_map<int,int> &columnTypeMap,
+		map<string, ShpFieldValue> &keyVals) 
+{
 	for (auto it : columnMap) {
-		int pos = it.first;
-		string key = it.second;
-		vector_tile::Tile_Value v;
-		auto iter = attributeMap.find(key);
+		const int &pos = it.first;
+		const string &key = it.second;
+		ShpFieldValue v;
 		auto ctmIter = columnTypeMap.find(pos);
-		if(ctmIter == columnTypeMap.end()) throw runtime_error("ctmIter is null");
-		int typeVal = 0;
 		switch (ctmIter->second) {
 			case FTInteger:  
-			         v.set_int_value(DBFReadIntegerAttribute(dbf, recordNum, pos));
-			         typeVal = 1;
+			         v = DBFReadIntegerAttribute(dbf, recordNum, pos);
 			         break;
 			case FTDouble:  
-			         v.set_double_value(DBFReadDoubleAttribute(dbf, recordNum, pos));
-			         typeVal = 1;
+			         v = DBFReadDoubleAttribute(dbf, recordNum, pos);
 			         break;
 			default: 
-			         v.set_string_value(DBFReadStringAttribute(dbf, recordNum, pos));
-			         typeVal = 3;
+			         v = DBFReadStringAttribute(dbf, recordNum, pos);
 			         break;
 		}
-		if (iter == attributeMap.end())
-			throw runtime_error("Column type missing while loading shp");
-		if (iter->second != typeVal)
-			throw runtime_error("Type of column unexpectedly changed while loading shp");
-		oo->addAttribute(key, v);
+		keyVals[key] = v;
 	}
 }
 
@@ -215,9 +204,10 @@ void readShapefile(const Box &clippingBox,
 					bool hasName = false;
 					if (indexField>-1) { name=DBFReadStringAttribute(dbf, i, indexField); hasName = true;}
 
-					OutputObjectRef oo = outObj.AddObject(layer, layerNum, CACHED_POINT, p, hasName, name);
+					map<string, ShpFieldValue> keyVals;
+					GetShapefileAttributes(dbf, i, columnMap, columnTypeMap, keyVals);
 
-					addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers);
+					outObj.AddObject(layer, layerNum, CACHED_POINT, p, hasName, name, keyVals);
 				}
 
 			} else if (shapeType==3) {
@@ -236,9 +226,10 @@ void readShapefile(const Box &clippingBox,
 						bool hasName = false;
 						if (indexField>-1) { name=DBFReadStringAttribute(dbf, i, indexField); hasName = true;}
 
-						OutputObjectRef oo = outObj.AddObject(layer, layerNum, CACHED_LINESTRING, *it, hasName, name);
+						map<string, ShpFieldValue> keyVals;
+						GetShapefileAttributes(dbf, i, columnMap, columnTypeMap, keyVals);
 
-						addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers);
+						outObj.AddObject(layer, layerNum, CACHED_LINESTRING, *it, hasName, name, keyVals);
 					}
 				}
 
@@ -300,10 +291,11 @@ void readShapefile(const Box &clippingBox,
 					bool hasName = false;
 					if (indexField>-1) { name=DBFReadStringAttribute(dbf, i, indexField); hasName = true;}
 
-					// create OutputObject
-					OutputObjectRef oo = outObj.AddObject(layer, layerNum, CACHED_POLYGON, out, hasName, name);
+					map<string, ShpFieldValue> keyVals;
+					GetShapefileAttributes(dbf, i, columnMap, columnTypeMap, keyVals);
 
-					addShapefileAttributes(dbf, oo, i, columnMap, columnTypeMap, layers);
+					// create OutputObject
+					outObj.AddObject(layer, layerNum, CACHED_POLYGON, out, hasName, name, keyVals);
 				}
 
 			} else {

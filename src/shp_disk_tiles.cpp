@@ -116,10 +116,10 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 	}
 }
 
-OutputObjectRef ShpDiskTiles::AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+void ShpDiskTiles::AddObject(const class LayerDef &layer, uint_least8_t layerNum,
 	enum OutputGeometryType geomType,
-	Geometry geometry, bool hasName, const std::string &name)
+	Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals)
 {
-	return this->tileIndex.AddObject(layer, layerNum, geomType, geometry, hasName, name);
+	this->tileIndex.AddObject(layer, layerNum, geomType, geometry, hasName, name, keyVals);
 }
 

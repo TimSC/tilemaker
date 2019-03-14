@@ -156,9 +156,9 @@ TileIndexCached::~TileIndexCached()
 
 }
 
-OutputObjectRef TileIndexCached::AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+void TileIndexCached::AddObject(const class LayerDef &layer, uint_least8_t layerNum,
 	enum OutputGeometryType geomType,
-	Geometry geometry, bool hasName, const std::string &name)
+	Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals)
 {
 	const string &layerName = layer.name;
 	bool isIndexed = layer.indexed;
@@ -200,7 +200,7 @@ OutputObjectRef TileIndexCached::AddObject(const class LayerDef &layer, uint_lea
 		break;
 	}
 
-	return oo;
+	oo->AddAttributes(keyVals);
 }
 
 vector<uint> TileIndexCached::findIntersectingGeometries(const string &layerName, Box &box) const {
