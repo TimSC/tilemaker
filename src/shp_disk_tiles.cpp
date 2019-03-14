@@ -11,8 +11,6 @@ ShpDiskTiles::ShpDiskTiles(uint baseZoom, const class LayerDefinition &layers):
 	baseZoom(baseZoom)
 {
 	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
-	layersLoading = nullptr;
-	layerNum = -1;
 }
 
 void ShpDiskTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
@@ -27,10 +25,10 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 	class TileIndexCached tmpTileIndex(zoom);
 
 	Box clippingBox = Box(geom::make<Point>(tilex2lon(dstIndex.x, zoom), tiley2lat(dstIndex.y+1, zoom)),
-	              geom::make<Point>(tilex2lon(dstIndex.x+1, zoom), tiley2lat(dstIndex.y, zoom)));
+				  geom::make<Point>(tilex2lon(dstIndex.x+1, zoom), tiley2lat(dstIndex.y, zoom)));
 
 	Box projClippingBox = Box(geom::make<Point>(clippingBox.min_corner().get<0>(), lat2latp(clippingBox.min_corner().get<1>())),
-	              geom::make<Point>(clippingBox.max_corner().get<0>(), lat2latp(clippingBox.max_corner().get<1>())));
+				  geom::make<Point>(clippingBox.max_corner().get<0>(), lat2latp(clippingBox.max_corner().get<1>())));
 
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
@@ -39,6 +37,7 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 			this->tileIndex.CreateNamedLayerIndex(layer.name);
 	}
 
+	ShapeFileToTileIndexCached converter(tmpTileIndex, layers);
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
 		// External layer sources
@@ -46,11 +45,16 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 
 		if (layer.source.size()==0) continue;
 
+		converter.layerNum = layerNum;
+		const string &filename = layer.source;
+		const vector<string> &columns = layer.sourceColumns;
+		const string &indexName = layer.indexName;
+
 		readShapefile(projClippingBox,
-		              layers,
-		              layerNum,
-					  tmpTileIndex);
-		
+					  filename,
+					  columns,
+					  indexName,
+					  converter);
 	}
 
 	tmpTileIndex.GetTileData(dstIndex, zoom, dstTile);
@@ -78,15 +82,14 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 	bool hasClippingBox,
 	const Box &clippingBox)
 {
-	this->layersLoading = &layers;
-
 	this->clippingBox = clippingBox;
 	this->xMin = lon2tilex(clippingBox.min_corner().get<0>(), baseZoom);
 	this->xMax = lon2tilex(clippingBox.max_corner().get<0>(), baseZoom)+1;
 	this->yMin = lat2tiley(clippingBox.max_corner().get<1>(), baseZoom)-1;
 	this->yMax = lat2tiley(clippingBox.min_corner().get<1>(), baseZoom);
 
-	for(this->layerNum=0; this->layerNum<layers.layers.size(); this->layerNum++)	
+	ShapeFileToLayers layerConverter(layers);
+	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
 		const LayerDef &layer = layers.layers[layerNum];
 		if(layer.indexed)
@@ -100,12 +103,14 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 			
 			const string &filename = layer.source;
 			const vector<string> &columns = layer.sourceColumns;
+			layerConverter.layerNum = layerNum;
 
-			prepareShapefile(filename, columns, *this);
+			prepareShapefile(filename, columns, layerConverter);
 		}
 	}
 
 	//TODO remove this up front loading of shapefile data
+	ShapeFileToTileIndexCached converter(this->tileIndex, layers);
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
 		// External layer sources
@@ -113,30 +118,18 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 
 		if (layer.source.size()>0) {
 			Box projClippingBox = Box(geom::make<Point>(clippingBox.min_corner().get<0>(), lat2latp(clippingBox.min_corner().get<1>())),
-			              geom::make<Point>(clippingBox.max_corner().get<0>(), lat2latp(clippingBox.max_corner().get<1>())));
+						  geom::make<Point>(clippingBox.max_corner().get<0>(), lat2latp(clippingBox.max_corner().get<1>())));
+			converter.layerNum = layerNum;
+			const string &filename = layer.source;
+			const vector<string> &columns = layer.sourceColumns;
+			const string &indexName = layer.indexName;
 
 			readShapefile(projClippingBox,
-			              layers,
-			              layerNum,
-						  *this);
+						  filename,
+						  columns,
+						  indexName,
+						  converter);
 		}
 	}
-
-	this->layersLoading = nullptr;
-}
-
-void ShpDiskTiles::AddObject(const class LayerDef &layer, uint_least8_t layerNum,
-	enum OutputGeometryType geomType,
-	Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals)
-{
-	this->tileIndex.AddObject(layer, layerNum, geomType, geometry, hasName, name, keyVals);
-}
-
-void ShpDiskTiles::FoundColumn(const std::string &key, int typeVal)
-{
-	if(this->layersLoading == nullptr)
-		throw runtime_error("this->layersLoading is null");
-	auto &attributeMap = this->layersLoading->layers[this->layerNum].attributeMap;
-	attributeMap[key] = typeVal;
 }
 

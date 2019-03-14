@@ -13,7 +13,7 @@ typedef std::vector<OutputObjectRef>::const_iterator OutputObjectsConstIt;
 typedef std::map<TileCoordinates, std::vector<OutputObjectRef>, TileCoordinatesCompare > TileIndexRaw;
 typedef std::set<TileCoordinates, TileCoordinatesCompare> TileCoordinatesSet;
 
-class TileIndex : public ShapeFileResultsDecoder
+class TileIndex
 {
 public:
 	TileIndex(uint baseZoom);
@@ -62,7 +62,27 @@ public:
 
 // ***********************************
 
-class TileDataSource : public ShapeFileResultsDecoder
+class ShapeFileToTileIndexCached : public ShapeFileResultsDecoder
+{
+public:
+	ShapeFileToTileIndexCached(class TileIndexCached &out, const class LayerDefinition &layers);
+	virtual ~ShapeFileToTileIndexCached();
+
+	virtual void AddObject(enum OutputGeometryType geomType,
+		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals);
+
+	virtual void FoundColumn(const std::string &key, int typeVal) {};
+
+	int layerNum;
+
+private:
+	class TileIndexCached &out;
+	const class LayerDefinition &layers;
+};
+
+// ***********************************
+
+class TileDataSource
 {
 public:
 	TileDataSource();
@@ -165,6 +185,21 @@ private:
 
 void GenerateTileListAtZoom(int xMin, int xMax, int yMin, int yMax, 
 	uint baseZoom, uint requestZoom, TileCoordinatesSet &dstCoords);
+
+class ShapeFileToLayers : public ShapeFileResultsDecoder
+{
+public:
+	ShapeFileToLayers(class LayerDefinition &layers);
+	virtual ~ShapeFileToLayers();
+
+	virtual void AddObject(enum OutputGeometryType geomType,
+		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals) {};
+
+	virtual void FoundColumn(const std::string &key, int typeVal);
+
+	int layerNum;
+	class LayerDefinition &layers;
+};
 
 #endif //_TILE_DATA_H
 

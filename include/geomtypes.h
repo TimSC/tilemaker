@@ -37,5 +37,8 @@ typedef uint64_t WayID;
 typedef std::vector<NodeID> NodeVec;
 typedef std::vector<WayID> WayVec;
 
+///\brief Specifies geometry type for an OutputObject
+enum OutputGeometryType { POINT, LINESTRING, POLYGON, CENTROID, CACHED_POINT, CACHED_LINESTRING, CACHED_POLYGON };
+
 #endif //_GEOM_TYPES_H
 

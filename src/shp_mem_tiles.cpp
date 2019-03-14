@@ -8,8 +8,7 @@ ShpMemTiles::ShpMemTiles(uint baseZoom):
 	TileDataSource(),
 	tileIndex(baseZoom)
 {
-	this->layersLoading = nullptr;
-	this->layerNum = 0;
+
 }
 
 void ShpMemTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
@@ -43,9 +42,8 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 	bool hasClippingBox,
 	const Box &clippingBox)
 {
-	this->layersLoading = &layers;
-
-	for(this->layerNum=0; this->layerNum<layers.layers.size(); this->layerNum++)	
+	ShapeFileToLayers layerConverter(layers);
+	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
 		const LayerDef &layer = layers.layers[layerNum];
 		if(layer.indexed)
@@ -59,11 +57,13 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 
 			const string &filename = layer.source;
 			const vector<string> &columns = layer.sourceColumns;
+			layerConverter.layerNum = layerNum;
 
-			prepareShapefile(filename, columns, *this);
+			prepareShapefile(filename, columns, layerConverter);
 		}
 	}
 
+	ShapeFileToTileIndexCached converter(this->tileIndex, layers);
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
 		// External layer sources
@@ -72,22 +72,17 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 		if (layer.source.size()>0) {
 			Box projClippingBox = Box(geom::make<Point>(clippingBox.min_corner().get<0>(), lat2latp(clippingBox.min_corner().get<1>())),
 			              geom::make<Point>(clippingBox.max_corner().get<0>(), lat2latp(clippingBox.max_corner().get<1>())));
+			converter.layerNum = layerNum;
+			const string &filename = layer.source;
+			const vector<string> &columns = layer.sourceColumns;
+			const string &indexName = layer.indexName;
 
 			readShapefile(projClippingBox,
-			              layers,
-			              layerNum,
-						  this->tileIndex);
+			              filename,
+						  columns,
+			              indexName,
+						  converter);
 		}
 	}
-
-	this->layersLoading = nullptr;
-}
-
-void ShpMemTiles::FoundColumn(const std::string &key, int typeVal)
-{
-	if(this->layersLoading == nullptr)
-		throw runtime_error("this->layersLoading is null");
-	auto &attributeMap = this->layersLoading->layers[this->layerNum].attributeMap;
-	attributeMap[key] = typeVal;
 }
 

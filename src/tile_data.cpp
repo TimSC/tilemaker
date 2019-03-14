@@ -8,7 +8,6 @@ namespace geom = boost::geometry;
 typedef std::pair<OutputObjectsConstIt,OutputObjectsConstIt> OutputObjectsConstItPair;
 
 TileIndex::TileIndex(uint baseZoom):
-	ShapeFileResultsDecoder(),
 	baseZoom(baseZoom)
 {
 
@@ -242,6 +241,29 @@ void TileIndexCached::CreateNamedLayerIndex(const std::string &layerName)
 	indices[layerName]=RTree();
 }
 
+// *********************************************
+
+ShapeFileToTileIndexCached::ShapeFileToTileIndexCached(class TileIndexCached &out, const class LayerDefinition &layers):
+	ShapeFileResultsDecoder(),
+	out(out),
+	layers(layers)
+{
+	layerNum = 0;
+
+}
+
+ShapeFileToTileIndexCached::~ShapeFileToTileIndexCached()
+{
+
+}
+
+void ShapeFileToTileIndexCached::AddObject(enum OutputGeometryType geomType,
+	Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals)
+{
+	const LayerDef &layer = this->layers.layers[layerNum];
+	this->out.AddObject(layer, this->layerNum, geomType, geometry, hasName, name, keyVals);
+}
+
 // *********************************
 
 ObjectsAtSubLayerIterator::ObjectsAtSubLayerIterator(OutputObjectsConstIt it, const class TileData &tileData):
@@ -413,8 +435,7 @@ void GenerateTileListAtZoom(int xMin, int xMax, int yMin, int yMax,
 
 // ******************************************************
 
-TileDataSource::TileDataSource():
-	ShapeFileResultsDecoder()
+TileDataSource::TileDataSource()
 {
 
 }
@@ -422,5 +443,24 @@ TileDataSource::TileDataSource():
 TileDataSource::~TileDataSource()
 {
 
+}
+
+// ********************************************
+
+ShapeFileToLayers::ShapeFileToLayers(class LayerDefinition &layers):
+	layers(layers)
+{
+	layerNum = 0;
+}
+
+ShapeFileToLayers::~ShapeFileToLayers()
+{
+	
+}
+
+void ShapeFileToLayers::FoundColumn(const std::string &key, int typeVal)
+{
+	auto &attributeMap = this->layers.layers[this->layerNum].attributeMap;
+	attributeMap[key] = typeVal;
 }
 

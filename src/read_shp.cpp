@@ -117,21 +117,17 @@ void prepareShapefile(const string &filename,
 }
 
 // Read shapefile, and create OutputObjects for all objects within the specified bounding box
-void readShapefile(const Box &clippingBox, 
-				   const class LayerDefinition &layers,
-                   uint layerNum,
-				   class ShapeFileResultsDecoder &outObj) 
+void readShapefile(const Box &clippingBox,
+					const std::string &filename,
+					const std::vector<std::string> &columns,
+					const std::string &indexName,
+					class ShapeFileResultsDecoder &outObj) 
 {
 	SHPHandle shp = nullptr;
 	DBFHandle dbf = nullptr;
 
 	try
 	{
-		const LayerDef &layer = layers.layers[layerNum];
-		const string &filename = layer.source;
-		const vector<string> &columns = layer.sourceColumns;
-		const string &indexName = layer.indexName;
-
 		// open shapefile
 		shp = SHPOpen(filename.c_str(), "rb");
 		if(shp == nullptr)
@@ -193,7 +189,7 @@ void readShapefile(const Box &clippingBox,
 					map<string, ShpFieldValue> keyVals;
 					GetShapefileAttributes(dbf, i, columnMap, columnTypeMap, keyVals);
 
-					outObj.AddObject(layer, layerNum, CACHED_POINT, p, hasName, name, keyVals);
+					outObj.AddObject(CACHED_POINT, p, hasName, name, keyVals);
 				}
 
 			} else if (shapeType==3) {
@@ -215,7 +211,7 @@ void readShapefile(const Box &clippingBox,
 						map<string, ShpFieldValue> keyVals;
 						GetShapefileAttributes(dbf, i, columnMap, columnTypeMap, keyVals);
 
-						outObj.AddObject(layer, layerNum, CACHED_LINESTRING, *it, hasName, name, keyVals);
+						outObj.AddObject(CACHED_LINESTRING, *it, hasName, name, keyVals);
 					}
 				}
 
@@ -281,7 +277,7 @@ void readShapefile(const Box &clippingBox,
 					GetShapefileAttributes(dbf, i, columnMap, columnTypeMap, keyVals);
 
 					// create OutputObject
-					outObj.AddObject(layer, layerNum, CACHED_POLYGON, out, hasName, name, keyVals);
+					outObj.AddObject(CACHED_POLYGON, out, hasName, name, keyVals);
 				}
 
 			} else {
