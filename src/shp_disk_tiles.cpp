@@ -51,11 +51,24 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 		const vector<string> &columns = layer.sourceColumns;
 		const string &indexName = layer.indexName;
 
-		class ShapefileReader shapefileReader(filename,
+		//Each thread must have its own shapelib objects. Open them and keep open for later use.
+		mtx.lock();
+		auto shapefileReaderMap = shapefileReaderThreadMap[std::this_thread::get_id()];
+		auto itr = shapefileReaderMap.find(layerNum);
+		std::shared_ptr<class ShapefileReader> sfr;
+		if (itr == shapefileReaderMap.end())
+		{
+			std::shared_ptr<class ShapefileReader> sfrn(std::make_shared<class ShapefileReader>(filename,
 					  columns,
-		              indexName);
-		shapefileReader.ReadAll(projClippingBox, converter);
-
+		              indexName));
+			sfr = sfrn; //Apparently, shared_ptr counts are thread safe.
+			shapefileReaderMap[layerNum] = sfrn;
+		}
+		else
+			sfr = itr->second;
+		mtx.unlock();
+		
+		sfr->ReadAll(projClippingBox, converter);
 	}
 
 	tmpTileIndex.GetTileData(dstIndex, zoom, dstTile);
@@ -129,11 +142,12 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 			const vector<string> &columns = layer.sourceColumns;
 			const string &indexName = layer.indexName;
 
-			class ShapefileReader shapefileReader(filename,
-						  columns,
-			              indexName);
-			shapefileReader.ReadAll(projClippingBox, converterBareTileIndex);
+			//Open shapefile but keep it open for later use
+			std::shared_ptr<class ShapefileReader> sfr = std::make_shared<class ShapefileReader>(filename,
+					  columns,
+		              indexName);
 
+			sfr->ReadAll(projClippingBox, converterBareTileIndex);
 		}
 	}
 

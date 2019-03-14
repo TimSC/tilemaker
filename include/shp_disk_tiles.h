@@ -2,6 +2,9 @@
 #ifndef _SHP_DISK_TILES
 #define _SHP_DISK_TILES
 
+#include <thread>         // std::thread
+#include <mutex>          // std::mutex
+#include <memory>
 #include "tile_data.h"
 #include "shared_data.h"
 
@@ -29,12 +32,18 @@ private:
 
 	std::vector<uint> verifyIntersectResults(std::vector<IndexValue> &results, Point &p1, Point &p2) const;
 
+	//These must not be modified once processing has started. Multi-threading is used.
 	const class LayerDefinition &layers;
 	class TileIndexCached tileIndex;
 	class BareTileIndex bareTileIndex;
 	const uint baseZoom;
 	Box clippingBox;
 	int xMin, xMax, yMin, yMax;
+
+	//The following must be locked when used in multi threading
+	std::mutex mtx;
+	///Each thread must have its own shapelib objects.
+	std::map<std::thread::id, std::map<int, std::shared_ptr<class ShapefileReader> > > shapefileReaderThreadMap;
 };
 
 #endif //_OSM_DISK_TILES
