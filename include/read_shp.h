@@ -27,15 +27,18 @@ public:
 	virtual void AddObject(const class LayerDef &layer, uint_least8_t layerNum,
 		enum OutputGeometryType geomType,
 		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals) {};
+
+	virtual void FoundColumn(const std::string &key, int typeVal) {};
 };
 
-void prepareShapefile(class LayerDefinition &layers,
-                   uint baseZoom, uint layerNum);
+void prepareShapefile(const std::string &filename,
+		const std::vector<std::string> &columns,
+		class ShapeFileResultsDecoder &outObj);
 
 /// Read shapefile, and create OutputObjects for all objects within the specified bounding box
 void readShapefile(const Box &clippingBox,
                    const class LayerDefinition &layers,
-                   uint baseZoom, uint layerNum,
+                   uint layerNum,
 				   class ShapeFileResultsDecoder &outObj);
 
 #endif //_READ_SHP_H

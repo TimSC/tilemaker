@@ -8,7 +8,8 @@ ShpMemTiles::ShpMemTiles(uint baseZoom):
 	TileDataSource(),
 	tileIndex(baseZoom)
 {
-
+	this->layersLoading = nullptr;
+	this->layerNum = 0;
 }
 
 void ShpMemTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
@@ -42,7 +43,9 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 	bool hasClippingBox,
 	const Box &clippingBox)
 {
-	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
+	this->layersLoading = &layers;
+
+	for(this->layerNum=0; this->layerNum<layers.layers.size(); this->layerNum++)	
 	{
 		const LayerDef &layer = layers.layers[layerNum];
 		if(layer.indexed)
@@ -54,7 +57,10 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 				exit(EXIT_FAILURE);
 			}
 
-			prepareShapefile(layers, tileIndex.GetBaseZoom(), layerNum);
+			const string &filename = layer.source;
+			const vector<string> &columns = layer.sourceColumns;
+
+			prepareShapefile(filename, columns, *this);
 		}
 	}
 
@@ -69,9 +75,19 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 
 			readShapefile(projClippingBox,
 			              layers,
-			              tileIndex.GetBaseZoom(), layerNum,
+			              layerNum,
 						  this->tileIndex);
 		}
 	}
+
+	this->layersLoading = nullptr;
+}
+
+void ShpMemTiles::FoundColumn(const std::string &key, int typeVal)
+{
+	if(this->layersLoading == nullptr)
+		throw runtime_error("this->layersLoading is null");
+	auto &attributeMap = this->layersLoading->layers[this->layerNum].attributeMap;
+	attributeMap[key] = typeVal;
 }
 

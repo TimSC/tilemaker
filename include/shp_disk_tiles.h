@@ -26,9 +26,11 @@ public:
 		const Box &clippingBox);
 
 	// Used while shapefile is loading
-	void AddObject(const class LayerDef &layer, uint_least8_t layerNum,
+	virtual void AddObject(const class LayerDef &layer, uint_least8_t layerNum,
 		enum OutputGeometryType geomType,
 		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals);
+
+	virtual void FoundColumn(const std::string &key, int typeVal);
 
 private:
 
@@ -37,6 +39,8 @@ private:
 	const uint baseZoom;
 	Box clippingBox;
 	int xMin, xMax, yMin, yMax;
+	class LayerDefinition *layersLoading;
+	size_t layerNum;
 };
 
 #endif //_OSM_DISK_TILES

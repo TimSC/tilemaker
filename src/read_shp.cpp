@@ -32,32 +32,29 @@ void fillPointArrayFromShapefile(vector<Point> *points, SHPObject *shape, uint p
 }
 
 void setLayerColumnTypes(
-		DBFHandle &dbf, int layerNum,
+		DBFHandle &dbf,
 		const unordered_map<int,string> &columnMap, const unordered_map<int,int> &columnTypeMap,
-		class LayerDefinition &layers) {
+		class ShapeFileResultsDecoder &outObj) {
 
-	auto &attributeMap = layers.layers[layerNum].attributeMap;
 	for (auto it : columnMap) {
 		int pos = it.first;
 		string key = it.second;
-		auto iter = attributeMap.find(key);
 		auto ctmIter = columnTypeMap.find(pos);
 		if(ctmIter == columnTypeMap.end()) throw runtime_error("ctmIter is null");
 		int typeVal = 0;
 		switch (ctmIter->second) {
-			case 1:
+			case FTInteger:
 			     typeVal = 1;
 			     break;
-			case 2:
+			case FTDouble:
 			     typeVal = 1;
 			     break;
 			default:
 			     typeVal = 3;
 			     break;
 		}
-		if (iter != attributeMap.end() && iter->second != typeVal)
-			throw runtime_error("Type of column unexpectedly changed while loading shp");
-		attributeMap[key] = typeVal;
+
+		outObj.FoundColumn(key, typeVal);
 	}
 }
 
@@ -87,27 +84,16 @@ void GetShapefileAttributes(DBFHandle &dbf,
 	}
 }
 
-void prepareShapefile(class LayerDefinition &layers,
-                   uint baseZoom, uint layerNum) 
+void prepareShapefile(const string &filename,
+		const vector<string> &columns,
+		class ShapeFileResultsDecoder &outObj) 
 {
 	DBFHandle dbf = nullptr;
 	try
 	{
-		LayerDef &layer = layers.layers[layerNum];
-		const string &filename = layer.source;
-		const vector<string> &columns = layer.sourceColumns;
 		dbf = DBFOpen(filename.c_str(), "rb");
 		if(dbf == nullptr)
 			return;
-
-		// list columns
-		int count = DBFGetFieldCount(dbf);
-		for (int i=0; i<count; i++)
-		{
-			char fieldName[12] = "";
-			DBFFieldType fieldType = DBFGetFieldInfo(dbf,i,fieldName,NULL,NULL);
-			cout << "For layer " << layerNum << ", found shp field " << i << "," << fieldName << "(" << (int)fieldType << ")" << endl;
-		}
 
 		// prepare columns
 		unordered_map<int,string> columnMap;
@@ -120,7 +106,7 @@ void prepareShapefile(class LayerDefinition &layers,
 			}
 		}
 
-		setLayerColumnTypes(dbf, layerNum, columnMap, columnTypeMap, layers);
+		setLayerColumnTypes(dbf, columnMap, columnTypeMap, outObj);
 	}
 	catch(exception &err)
 	{
@@ -133,7 +119,7 @@ void prepareShapefile(class LayerDefinition &layers,
 // Read shapefile, and create OutputObjects for all objects within the specified bounding box
 void readShapefile(const Box &clippingBox, 
 				   const class LayerDefinition &layers,
-                   uint baseZoom, uint layerNum,
+                   uint layerNum,
 				   class ShapeFileResultsDecoder &outObj) 
 {
 	SHPHandle shp = nullptr;

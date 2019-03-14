@@ -25,9 +25,13 @@ public:
 		bool hasClippingBox,
 		const Box &clippingBox);
 
+	virtual void FoundColumn(const std::string &key, int typeVal);
+
 private:
 
 	class TileIndexCached tileIndex;
+	class LayerDefinition *layersLoading;
+	size_t layerNum;
 };
 
 #endif //_OSM_MEM_TILES

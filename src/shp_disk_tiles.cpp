@@ -11,6 +11,8 @@ ShpDiskTiles::ShpDiskTiles(uint baseZoom, const class LayerDefinition &layers):
 	baseZoom(baseZoom)
 {
 	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
+	layersLoading = nullptr;
+	layerNum = -1;
 }
 
 void ShpDiskTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
@@ -46,7 +48,7 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 
 		readShapefile(projClippingBox,
 		              layers,
-		              tmpTileIndex.GetBaseZoom(), layerNum,
+		              layerNum,
 					  tmpTileIndex);
 		
 	}
@@ -76,13 +78,15 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 	bool hasClippingBox,
 	const Box &clippingBox)
 {
+	this->layersLoading = &layers;
+
 	this->clippingBox = clippingBox;
 	this->xMin = lon2tilex(clippingBox.min_corner().get<0>(), baseZoom);
 	this->xMax = lon2tilex(clippingBox.max_corner().get<0>(), baseZoom)+1;
 	this->yMin = lat2tiley(clippingBox.max_corner().get<1>(), baseZoom)-1;
 	this->yMax = lat2tiley(clippingBox.min_corner().get<1>(), baseZoom);
 
-	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
+	for(this->layerNum=0; this->layerNum<layers.layers.size(); this->layerNum++)	
 	{
 		const LayerDef &layer = layers.layers[layerNum];
 		if(layer.indexed)
@@ -93,8 +97,11 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 				cerr << "Can't read shapefiles unless a bounding box is provided." << endl;
 				exit(EXIT_FAILURE);
 			}
+			
+			const string &filename = layer.source;
+			const vector<string> &columns = layer.sourceColumns;
 
-			prepareShapefile(layers, tileIndex.GetBaseZoom(), layerNum);
+			prepareShapefile(filename, columns, *this);
 		}
 	}
 
@@ -110,10 +117,12 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 
 			readShapefile(projClippingBox,
 			              layers,
-			              tileIndex.GetBaseZoom(), layerNum,
+			              layerNum,
 						  *this);
 		}
 	}
+
+	this->layersLoading = nullptr;
 }
 
 void ShpDiskTiles::AddObject(const class LayerDef &layer, uint_least8_t layerNum,
@@ -121,5 +130,13 @@ void ShpDiskTiles::AddObject(const class LayerDef &layer, uint_least8_t layerNum
 	Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals)
 {
 	this->tileIndex.AddObject(layer, layerNum, geomType, geometry, hasName, name, keyVals);
+}
+
+void ShpDiskTiles::FoundColumn(const std::string &key, int typeVal)
+{
+	if(this->layersLoading == nullptr)
+		throw runtime_error("this->layersLoading is null");
+	auto &attributeMap = this->layersLoading->layers[this->layerNum].attributeMap;
+	attributeMap[key] = typeVal;
 }
 
