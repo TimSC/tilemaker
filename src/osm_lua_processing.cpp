@@ -353,7 +353,7 @@ bool OsmLuaProcessing::StoreNode(int64_t objId, const class MetaData &metaData,
 	if(readPreprocessing) return false;
 
 	struct LatpLon nodePos;
-	nodePos.latp = (int32_t)round(lat * 10000000.0);
+	nodePos.latp = (int32_t)round(lat2latp(lat) * 10000000.0);
 	nodePos.lon = (int32_t)round(lon * 10000000.0);
 
 	osmStore.nodes.insert_back(objId, nodePos);
@@ -365,7 +365,7 @@ bool OsmLuaProcessing::StoreNode(int64_t objId, const class MetaData &metaData,
 		isWay = false;
 		isRelation = false;
 
-		setLocation(lon, lat, lon, lat);
+		setLocation(nodePos.lon, nodePos.latp, nodePos.lon, nodePos.latp);
 
 		currentTags = tags;
 
