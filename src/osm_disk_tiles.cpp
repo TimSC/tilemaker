@@ -2,6 +2,7 @@
 #include "osm_lua_processing.h"
 #include <boost/filesystem.hpp>
 #include <iostream>
+#include "../cppo5m/utils.h"
 using namespace std;
 using namespace boost::filesystem;
 
@@ -165,13 +166,6 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 		shpData, 
 		tmpTiles);
 
-	class PbfReader pbfReader;
-	pbfReader.output = &osmLuaProcessing;
-
-	// ----	Read significant node tags
-	vector<string> nodeKeyVec = osmLuaProcessing.GetSignificantNodeKeys();
-	unordered_set<string> nodeKeys(nodeKeyVec.begin(), nodeKeyVec.end());
-
 	if(zoom < tilesZoom)
 	{
 		int scale = pow(2, tilesZoom-zoom);
@@ -193,7 +187,10 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 				inputFile /= to_string(x); 
 				inputFile /= to_string(y) + ".pbf";
 				cout << inputFile << endl;
-				pbfReader.ReadPbfFile(inputFile.string(), nodeKeys);
+
+				std::filebuf infi;
+				infi.open(inputFile.string(), std::ios::in);
+				LoadFromPbf(infi, &osmLuaProcessing);
 			}
 		}
 	}
@@ -218,7 +215,19 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 		inputFile /= to_string(tilex); 
 		inputFile /= to_string(tiley) + ".pbf";
 		cout << inputFile << endl;
-		pbfReader.ReadPbfFile(inputFile.string(), nodeKeys);
+
+		std::filebuf infi;
+
+		osmLuaProcessing.readPreprocessing = true;
+		osmLuaProcessing.startOsmData();
+		infi.open(inputFile.string(), std::ios::in);
+		std::shared_ptr<class OsmDecoder> decoder = DecoderOsmFactory(infi, inputFile.string());
+		LoadFromDecoder(infi, decoder.get(), &osmLuaProcessing);
+
+		osmLuaProcessing.readPreprocessing = false;
+		infi.pubseekpos(0);
+		decoder = DecoderOsmFactory(infi, inputFile.string());
+		LoadFromDecoder(infi, decoder.get(), &osmLuaProcessing);
 
 	}
 

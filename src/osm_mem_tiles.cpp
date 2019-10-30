@@ -1,5 +1,7 @@
 #include "osm_mem_tiles.h"
+#include <fstream>
 #include "osm_lua_processing.h"
+#include "../cppo5m/utils.h"
 using namespace std;
 
 OsmMemTiles::OsmMemTiles(uint baseZoom,
@@ -13,25 +15,27 @@ OsmMemTiles::OsmMemTiles(uint baseZoom,
 	tileIndex(baseZoom)
 {
 	class LayerDefinition layersTmp(layers);
-	OsmLuaProcessing osmLuaProcessing(config, layersTmp, luaFile, 
+	std::shared_ptr<OsmLuaProcessing> osmLuaProcessing = make_shared<OsmLuaProcessing>(config, layersTmp, luaFile, 
 		shpMemTiles, 
 		*this);
 
-	// ----	Read significant node tags
-	vector<string> nodeKeyVec = osmLuaProcessing.GetSignificantNodeKeys();
-	unordered_set<string> nodeKeys(nodeKeyVec.begin(), nodeKeyVec.end());
-
 	// ----	Read all PBFs
 
-	class PbfReader pbfReader;
-	pbfReader.output = &osmLuaProcessing;
 	for (auto inputFile : inputFiles) {
 
 		cout << "Reading " << inputFile << endl;
 
-		int ret = pbfReader.ReadPbfFile(inputFile, nodeKeys);
-		if(ret != 0)
-			cerr << "Error reading input " << inputFile << endl;
+		osmLuaProcessing->readPreprocessing = true;
+		osmLuaProcessing->startOsmData();
+		std::filebuf infi;
+		infi.open(inputFile, std::ios::in);
+		std::shared_ptr<class OsmDecoder> decoder = DecoderOsmFactory(infi, inputFile);
+		LoadFromDecoder(infi, decoder.get(), osmLuaProcessing.get());
+
+		osmLuaProcessing->readPreprocessing = false;
+		infi.pubseekpos(0);
+		decoder = DecoderOsmFactory(infi, inputFile);
+		LoadFromDecoder(infi, decoder.get(), osmLuaProcessing.get());
 	}
 }
 

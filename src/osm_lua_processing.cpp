@@ -11,9 +11,11 @@ OsmLuaProcessing::OsmLuaProcessing(const class Config &configIn, class LayerDefi
 	shpMemTiles(shpMemTiles),
 	outputTiles(outputTiles),
 	config(configIn),
-	layers(layers)
+	layers(layers),
+	IDataStreamHandler()
 {
 	newWayID = MAX_WAY_ID;
+	readPreprocessing = false;
 
 	// ----	Initialise Lua
 	luaState.setErrorHandler(kaguya::ErrorHandler::throwDefaultError);
@@ -40,6 +42,8 @@ OsmLuaProcessing::OsmLuaProcessing(const class Config &configIn, class LayerDefi
 
 	luaState("if init_function~=nil then init_function() end");
 
+	vector<string> nodeKeyVec = luaState["node_keys"];
+	this->significantKeys.insert(nodeKeyVec.begin(), nodeKeyVec.end());
 }
 
 OsmLuaProcessing::~OsmLuaProcessing()
@@ -105,7 +109,7 @@ bool OsmLuaProcessing::IsClosed() const {
 	if (isRelation) {
 		return true; // TODO: check it when non-multipolygon are supported
 	} else {
-		return nodeVec->front() == nodeVec->back();
+		return nodeVec.front() == nodeVec.back();
 	}
 }
 
@@ -152,7 +156,7 @@ const Linestring &OsmLuaProcessing::linestringCached() {
 		}
 		else if(isWay)
 		{
-			linestringCache = osmStore.nodeListLinestring(*nodeVec);
+			linestringCache = osmStore.nodeListLinestring(nodeVec);
 		}
 	}
 	return linestringCache;
@@ -161,7 +165,7 @@ const Linestring &OsmLuaProcessing::linestringCached() {
 const Polygon &OsmLuaProcessing::polygonCached() {
 	if (!polygonInited) {
 		polygonInited = true;
-		polygonCache = osmStore.nodeListPolygon(*nodeVec);
+		polygonCache = osmStore.nodeListPolygon(nodeVec);
 	}
 	return polygonCache;
 }
@@ -328,61 +332,90 @@ void OsmLuaProcessing::startOsmData()
 	osmStore.clear();
 }
 
-void OsmLuaProcessing::everyNode(NodeID id, LatpLon node)
+bool OsmLuaProcessing::Finish() 
 {
-	osmStore.nodes.insert_back(id, node);
+	return false;
 }
 
-// We are now processing a node
-void OsmLuaProcessing::setNode(NodeID id, LatpLon node, const std::map<std::string, std::string> &tags) {
-	reset();
-	osmID = id;
-	isWay = false;
-	isRelation = false;
+bool OsmLuaProcessing::StoreIsDiff(bool) 
+{
+	return false;
+}
 
-	setLocation(node.lon, node.latp, node.lon, node.latp);
+bool OsmLuaProcessing::StoreBounds(double x1, double y1, double x2, double y2) 
+{
+	return false;
+}
 
-	currentTags = tags;
+bool OsmLuaProcessing::StoreNode(int64_t objId, const class MetaData &metaData, 
+	const TagMap &tags, double lat, double lon) 
+{	
+	if(readPreprocessing) return false;
 
-	//Start Lua processing for node
-	try
+	struct LatpLon nodePos;
+	nodePos.latp = (int32_t)round(lat * 10000000.0);
+	nodePos.lon = (int32_t)round(lon * 10000000.0);
+
+	osmStore.nodes.insert_back(objId, nodePos);
+
+	if(tags.size() > 0 && CheckTagsIfSignificant(tags))
 	{
-		luaState["node_function"](this);
-	}
-	catch(kaguya::LuaRuntimeError &err)
-	{
-		cerr << "kaguya::LuaRuntimeError: " << err.what() << endl;
-		auto debug = luaState["debug"];
-		auto traceback = debug["traceback"];
-		cerr << traceback() << endl;
-		return;
-	}
+		reset();
+		osmID = objId;
+		isWay = false;
+		isRelation = false;
 
-	if (!this->empty()) {
-		TileCoordinates index = latpLon2index(node, this->outputTiles.GetBaseZoom());
-		for (auto jt = this->outputs.begin(); jt != this->outputs.end(); ++jt) {
-			outputTiles.AddObject(index, *jt);
+		setLocation(lon, lat, lon, lat);
+
+		currentTags = tags;
+
+		//Start Lua processing for node
+		try
+		{
+			luaState["node_function"](this);
+		}
+		catch(kaguya::LuaRuntimeError &err)
+		{
+			cerr << "kaguya::LuaRuntimeError: " << err.what() << endl;
+			auto debug = luaState["debug"];
+			auto traceback = debug["traceback"];
+			cerr << traceback() << endl;
+			return false;
+		}
+
+		if (!this->empty()) {
+			TileCoordinates index = latpLon2index(nodePos, this->outputTiles.GetBaseZoom());
+			for (auto jt = this->outputs.begin(); jt != this->outputs.end(); ++jt) {
+				outputTiles.AddObject(index, *jt);
+			}
 		}
 	}
+
+	return false;
 }
 
-// We are now processing a way
-void OsmLuaProcessing::setWay(Way *way, NodeVec *nodeVecPtr, bool inRelation, const std::map<std::string, std::string> &tags) {
+bool OsmLuaProcessing::StoreWay(int64_t objId, const class MetaData &metaData, 
+	const TagMap &tags, const std::vector<int64_t> &refs) 
+{
+	if(readPreprocessing) return false;
+
 	reset();
-	osmID = way->id();
+	osmID = objId;
 	isWay = true;
 	isRelation = false;
+	bool inRelation = (waysInRelation.find(objId) != waysInRelation.end());
 
 	outerWayVec = nullptr;
 	innerWayVec = nullptr;
-	nodeVec = nodeVecPtr;
+	nodeVec.clear();
+	nodeVec.insert(nodeVec.end(), refs.begin(), refs.end());
 	try {
-		setLocation(osmStore.nodes.at(nodeVec->front()).lon, osmStore.nodes.at(nodeVec->front()).latp,
-				osmStore.nodes.at(nodeVec->back()).lon, osmStore.nodes.at(nodeVec->back()).latp);
+		setLocation(osmStore.nodes.at(nodeVec.front()).lon, osmStore.nodes.at(nodeVec.front()).latp,
+				osmStore.nodes.at(nodeVec.back()).lon, osmStore.nodes.at(nodeVec.back()).latp);
 
 	} catch (std::out_of_range &err) {
 		std::stringstream ss;
-		ss << "Way " << osmID << " is missing a node";
+		ss << "Way " << osmID << " is missing a node, " << err.what();
 		throw std::out_of_range(ss.str());
 	}
 
@@ -403,22 +436,22 @@ void OsmLuaProcessing::setWay(Way *way, NodeVec *nodeVecPtr, bool inRelation, co
 			auto debug = luaState["debug"];
 			auto traceback = debug["traceback"];
 			cerr << traceback() << endl;
-			return;
+			return false;
 		}
 	}
 
 	if (!this->empty() || inRelation) {
 		// Store the way's nodes in the global way store
 		WayStore &ways = osmStore.ways;
-		WayID wayId = static_cast<WayID>(way->id());
-		ways.insert_back(wayId, *nodeVec);
+		WayID wayId = static_cast<WayID>(objId);
+		ways.insert_back(wayId, nodeVec);
 	}
 
 	if (!this->empty()) {
 		// create a list of tiles this way passes through (tileSet)
 		unordered_set<TileCoordinates> tileSet;
 		try {
-			insertIntermediateTiles(osmStore.nodeListLinestring(*nodeVec), this->outputTiles.GetBaseZoom(), tileSet);
+			insertIntermediateTiles(osmStore.nodeListLinestring(nodeVec), this->outputTiles.GetBaseZoom(), tileSet);
 
 			// then, for each tile, store the OutputObject for each layer
 			bool polygonExists = false;
@@ -450,23 +483,44 @@ void OsmLuaProcessing::setWay(Way *way, NodeVec *nodeVecPtr, bool inRelation, co
 		}
 	}
 
+	return false;
 }
 
-// We are now processing a relation
-// (note that we store relations as ways with artificial IDs, and that
-//  we use decrementing positive IDs to give a bit more space for way IDs)
-void OsmLuaProcessing::setRelation(Relation *relation, WayVec *outerWayVecPtr, WayVec *innerWayVecPtr,
-	const std::map<std::string, std::string> &tags) {
+bool OsmLuaProcessing::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
+	const std::vector<std::string> &refRoles) 
+{
+	if(readPreprocessing)
+	{
+		for(size_t i=0; i<refIds.size(); i++)
+			if(refTypeStrs[i] == "way")
+				waysInRelation.insert(refIds[i]);
+		return false;
+	}
+
 	reset();
 	osmID = --newWayID;
 	isWay = true;
 	isRelation = true;
 
-	outerWayVec = outerWayVecPtr;
-	innerWayVec = innerWayVecPtr;
-	nodeVec = nullptr;
-	//setLocation(...); TODO
+	WayVec outerWayVec;
+	WayVec innerWayVec;
+	nodeVec.clear();
 
+	auto it = tags.find("type");
+	if(it == tags.end() or it->second != "multipolygon") return false; //Only multipolygons are supported
+
+	for(size_t i=0; i<refIds.size(); i++)
+	{
+		if(refTypeStrs[i] != "way") continue;
+
+		if(refRoles[i] == "outer") outerWayVec.push_back(refIds[i]);
+		else if(refRoles[i] == "inner") innerWayVec.push_back(refIds[i]);
+	}
+	this->outerWayVec = &outerWayVec;
+	this->innerWayVec = &innerWayVec;
+	
+	//setLocation(...); TODO
 	currentTags = tags;
 
 	bool ok = true;
@@ -483,7 +537,7 @@ void OsmLuaProcessing::setRelation(Relation *relation, WayVec *outerWayVecPtr, W
 			auto debug = luaState["debug"];
 			auto traceback = debug["traceback"];
 			cerr << traceback() << endl;
-			return;
+			return false;
 		}
 	}
 
@@ -492,18 +546,18 @@ void OsmLuaProcessing::setRelation(Relation *relation, WayVec *outerWayVecPtr, W
 		WayID relID = this->osmID;
 		// Store the relation members in the global relation store
 		RelationStore &relations = osmStore.relations;
-		relations.insert_front(relID, *outerWayVec, *innerWayVec);
+		relations.insert_front(relID, outerWayVec, innerWayVec);
 
 		MultiPolygon mp;
 		try
 		{
 			// for each tile the relation may cover, put the output objects.
-			mp = osmStore.wayListMultiPolygon(*outerWayVec, *innerWayVec);
+			mp = osmStore.wayListMultiPolygon(outerWayVec, innerWayVec);
 		}
 		catch(std::out_of_range &err)
 		{
 			cout << "In relation " << relID << ": " << err.what() << endl;
-			return;
+			return false;
 		}		
 
 		unordered_set<TileCoordinates> tileSet;
@@ -526,16 +580,18 @@ void OsmLuaProcessing::setRelation(Relation *relation, WayVec *outerWayVecPtr, W
 			}
 		}
 	}
+
+	return false;
 }
 
-
-void OsmLuaProcessing::endOsmData()
+bool OsmLuaProcessing::CheckTagsIfSignificant(const TagMap &tags)
 {
-	osmStore.reportSize();
-}
+	for(auto it=tags.begin(); it != tags.end(); it ++)
+	{
+		auto it2 = this->significantKeys.find(it->first);
+		if(it2 != this->significantKeys.end()) return true;
+	}	
 
-vector<string> OsmLuaProcessing::GetSignificantNodeKeys()
-{
-	return luaState["node_keys"];
+	return false;
 }
 

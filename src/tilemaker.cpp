@@ -38,12 +38,12 @@ typedef unsigned uint;
 #include "write_geometry.h"
 
 #include "shared_data.h"
-#include "read_pbf.h"
 #include "tile_worker.h"
 #include "osm_mem_tiles.h"
 #include "osm_disk_tiles.h"
 #include "shp_mem_tiles.h"
 #include "shp_disk_tiles.h"
+#include "../cppo5m/utils.h"
 
 // Namespaces
 using namespace std;
@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
 	string outputFile, argClippingBoxStr;
 	bool verbose = false, sqlite= false, combineSimilarObjs = true, tiledInput = false;
 
-	po::options_description desc("tilemaker (c) 2016-2018 Richard Fairhurst and contributors\nConvert OpenStreetMap .pbf files into vector tiles\n\nAvailable options");
+	po::options_description desc("tilemaker (c) 2016-2019 Richard Fairhurst and contributors\nConvert OpenStreetMap .pbf files into vector tiles\n\nAvailable options");
 	desc.add_options()
 		("help",                                                                 "show help message")
 		("input",      po::value< vector<string> >(&inputFiles),                     "source .osm.pbf file")
@@ -126,13 +126,24 @@ int main(int argc, char* argv[]) {
 	{
 		// ----	Read bounding box from first .pbf
 		double minLon=0.0, maxLon=0.0, minLat=0.0, maxLat=0.0;
-		int ret = ReadPbfBoundingBox(inputFiles[0], minLon, maxLon, 
-			minLat, maxLat, hasClippingBox);
-		if(ret != 0) return ret;
+
+		std::filebuf infi;
+		infi.open(inputFiles[0], std::ios::in);
+		class FindBbox findBbox;
+		std::shared_ptr<class OsmDecoder> decoder = DecoderOsmFactory(infi, inputFiles[0]);
+		LoadFromDecoder(infi, decoder.get(), &findBbox);
+
+		hasClippingBox = findBbox.bboxFound;
+		minLon = findBbox.x1;
+		maxLon = findBbox.y1;
+		minLat = findBbox.x2;
+		maxLat = findBbox.y2;
+		cout << minLon <<"," << maxLon << "," << minLat << "," << maxLat << endl;
+
 		cout << inputFiles[0] << endl;
 		clippingBoxSrc = "first pbf file";
-		clippingBox = Box(geom::make<Point>(minLon, minLat),
-			              geom::make<Point>(maxLon, maxLat));
+		clippingBox = Box(geom::make<Point>(minLon, maxLon),
+			              geom::make<Point>(minLat, maxLat)); //This looks very wrong, implies bug elsewhere
 	}
 	else
 	{

@@ -17,6 +17,7 @@ Tilemaker is written in C++11. The chief dependencies are:
 * Lua 5.1
 * sqlite3
 * shapelib
+* expat
 
 rapidjson, sqlite_modern_cpp, clipper and kaguya are bundled in the include/ directory.
 
@@ -24,13 +25,13 @@ rapidjson, sqlite_modern_cpp, clipper and kaguya are bundled in the include/ dir
 
 Install all dependencies with Homebrew:
 
-	brew install protobuf boost lua51 shapelib
+	brew install protobuf boost lua51 shapelib expat
 
 ### Ubuntu
 
 Start with:
 
-	sudo apt-get install build-essential liblua5.1-0 liblua5.1-0-dev libprotobuf-dev libsqlite3-dev protobuf-compiler shapelib libshp-dev
+	sudo apt-get install build-essential liblua5.1-0 liblua5.1-0-dev libprotobuf-dev libsqlite3-dev protobuf-compiler shapelib libshp-dev libexpat1-dev
 
 If you're using Ubuntu 16.04, you can install Boost with `sudo apt-get install libboost-all-dev`. For 12.04 or 14.04, you'll need to install a recent Boost from [this PPA](https://launchpad.net/~ostogvin/+archive/ubuntu/tjo-develop):
 
