@@ -7,6 +7,14 @@
 
 node_keys = { "amenity", "shop", "sport", "tourism", "place", "office", "natural", "addr:housenumber" }
 
+amenityPassthuTags = {pub=true, bar=true, cafe=true, cinema=true, fast_food=true, fire_station=true, fuel=true, 
+				hospital=true, pharmacy=true, place_of_worship=true, toilet=true, town_hall=true, veterinary=true, library=true, 
+				cemetery=true}
+
+tourismPassthuTags = {museum=true, zoo=true, attraction=true, aquarium=true}
+
+shopPassthuTags = {laundry=true, bakery=true}
+
 -- Initialize Lua logic
 
 function init_function()
@@ -30,34 +38,49 @@ function node_function(node)
 	if amenity~="" or shop~="" or sport~="" or tourism ~= "" or office ~= "" or historic ~= "" then
 		
 		local rank = 10
-		local class = ""
+		local class = "marker"
 		local subclass = ""
 		if amenity~="" then 
 			rank = 4
-			class = "marker"
-			subclass = amenity
 			if amenity == "parking" then
+				class = "car"
 				rank = 10
 			end
+
+			if amenityPassthuTags.amenity then
+				class = amenity
+			else
+				subclass = amenity
+			end
+
 		elseif shop~="" then 
 			rank = 5 
-			class = "marker"
-			subclass = shop
+			
+			if shopPassthuTags.shop then
+				class = shop
+			else
+				class = "shop"
+				subclass = shop
+			end
+
 		elseif sport~="" then 
 			rank = 6
-			class = "marker"
 			subclass = sport
+
 		elseif tourism~="" then 
 			rank = 3
-			class = "marker"
-			subclass = tourism
+
+			if tourismPassthuTags.tourism then
+				class = tourism
+			else
+				subclass = tourism
+			end
+
 		elseif historic~="" then 
 			rank = 5
-			class = "marker"
 			subclass = historic
 		elseif office~="" then 
 			rank = 7
-			class = "marker"
 			subclass = office
 		end
 		if rank <= 4 then
