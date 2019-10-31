@@ -31,27 +31,34 @@ function node_function(node)
 		
 		local rank = 10
 		local class = ""
+		local subclass = ""
 		if amenity~="" then 
 			rank = 4
-			class = amenity
+			class = "marker"
+			subclass = amenity
 			if amenity == "parking" then
 				rank = 10
 			end
 		elseif shop~="" then 
 			rank = 5 
-			class = shop
+			class = "marker"
+			subclass = shop
 		elseif sport~="" then 
 			rank = 6
-			class = sport
+			class = "marker"
+			subclass = sport
 		elseif tourism~="" then 
 			rank = 3
-			class = tourism
+			class = "marker"
+			subclass = tourism
 		elseif historic~="" then 
 			rank = 5
-			class = historic
+			class = "marker"
+			subclass = historic
 		elseif office~="" then 
 			rank = 7
-			class = office
+			class = "marker"
+			subclass = office
 		end
 		if rank <= 4 then
 			node:Layer("poi", false)
@@ -60,7 +67,9 @@ function node_function(node)
 		end
 
 		node:Attribute("class", class)
+		node:Attribute("subclass", subclass)
 		node:AttributeNumeric("rank", rank)
+		SetNameAttributes (node, true)
 	end
 
 	local place = node:Find("place")
@@ -85,6 +94,8 @@ function node_function(node)
 		end
 		node:AttributeNumeric("rank", rank)
 		node:Attribute("class", place)
+
+		SetNameAttributes (node)
 	end
 
 	if natural ~= "" then
@@ -99,6 +110,8 @@ function node_function(node)
 		if natural == "bay" then
 			node:Layer("water_name", false)
 		end
+
+		SetNameAttributes (node)
 	end
 
 	if historic~="" then
@@ -113,14 +126,19 @@ function node_function(node)
 		return
 	end
 
-	SetNameAttributes (node)
 end
 
-function SetNameAttributes (obj)
+function SetNameAttributes (obj, isPoi)
+	isPoi = isPoi or false
+
 	local name = obj:Find("name")
 	if name ~= "" then
 		obj:Attribute("name:latin", name) -- https://github.com/openmaptiles/openmaptiles/issues/211
+		if isPoi then
+			obj:Attribute("name", name) -- why are POI names encoded differently?
+		end
 	end
+
 	local name_en = name
 	local name_de = name
 	if obj:Find("name:en") ~= "" then
@@ -129,12 +147,9 @@ function SetNameAttributes (obj)
 	if obj:Find("name:de") ~= "" then
 		name_de = obj:Find("name:de")
 	end
-	if name_en ~= "" then
-		obj:Attribute("name_en", name_en)
-	end
-	if name_de ~= "" then
-		obj:Attribute("name_de", name_de)
-	end
+	obj:Attribute("name_en", name_en)
+	obj:Attribute("name_de", name_de)
+
 end
 
 function Set (list)
