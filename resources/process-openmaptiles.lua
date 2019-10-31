@@ -119,7 +119,7 @@ end
 function SetNameAttributes (obj)
 	local name = obj:Find("name")
 	if name ~= "" then
-		obj:Attribute("name", name)
+		obj:Attribute("name:latin", name) -- https://github.com/openmaptiles/openmaptiles/issues/211
 	end
 	local name_en = name
 	local name_de = name
