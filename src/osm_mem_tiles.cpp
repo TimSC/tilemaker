@@ -12,7 +12,8 @@ OsmMemTiles::OsmMemTiles(uint baseZoom,
 		const class TileDataSource &shpMemTiles):
 
 	TileDataSource(),
-	tileIndex(baseZoom)
+	tileIndex(baseZoom),
+	inputFiles(inputFiles)
 {
 	class LayerDefinition layersTmp(layers);
 	std::shared_ptr<OsmLuaProcessing> osmLuaProcessing = make_shared<OsmLuaProcessing>(config, layersTmp, luaFile, 
@@ -58,5 +59,29 @@ void OsmMemTiles::AddObject(TileCoordinates index, OutputObjectRef oo)
 uint OsmMemTiles::GetBaseZoom()
 {
 	return tileIndex.GetBaseZoom();
+}
+
+bool OsmMemTiles::GetAvailableTileExtent(Box &clippingBox)
+{
+	// ----	Read bounding box from first .pbf
+	double minLon=0.0, maxLon=0.0, minLat=0.0, maxLat=0.0;
+
+	std::filebuf infi;
+	infi.open(inputFiles[0], std::ios::in);
+	class FindBbox findBbox;
+	std::shared_ptr<class OsmDecoder> decoder = DecoderOsmFactory(infi, inputFiles[0]);
+	LoadFromDecoder(infi, decoder.get(), &findBbox);
+
+	bool hasClippingBox = findBbox.bboxFound;
+	minLon = findBbox.x1;
+	maxLon = findBbox.y1;
+	minLat = findBbox.x2;
+	maxLat = findBbox.y2;
+	cout << minLon <<"," << maxLon << "," << minLat << "," << maxLat << endl;
+
+	cout << inputFiles[0] << endl;
+	clippingBox = Box(geom::make<Point>(minLon, maxLon),
+		              geom::make<Point>(minLat, maxLat)); //This looks very wrong, implies bug elsewhere
+	return hasClippingBox;
 }
 

@@ -14,11 +14,11 @@ string PathTrailing(const path &in)
 	return out;
 }
 
-void CheckAvailableDiskTiles(const std::string &basePath,
-	uint &tilesZoom,
-	bool &tileBoundsSet,
-	int &xMin, int &xMax, int &yMin, int &yMax)
+// *****************************************
+
+OsmDiskTilesZoomDir::OsmDiskTilesZoomDir(std::string pth) : OsmDiskTilesZoom()
 {
+	basePath = pth;
 	tilesZoom = 0;
 	tileBoundsSet = false;
 	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
@@ -73,25 +73,39 @@ void CheckAvailableDiskTiles(const std::string &basePath,
 	}
 }
 
-bool CheckAvailableDiskTileExtent(const std::string &basePath,
-	Box &clippingBox)
+OsmDiskTilesZoomDir::~OsmDiskTilesZoomDir()
 {
-	uint tilesZoom = 0;
-	bool tileBoundsSet = false;
-	int xMin=0, xMax=0, yMin=0, yMax=0;
 
-	CheckAvailableDiskTiles(basePath, tilesZoom,
-		tileBoundsSet,
-		xMin, xMax, yMin, yMax);
+}
 
-	cout << "disk tile extent x " << xMin << "," << xMax << endl;
-	cout << "y " << yMin << "," << yMax << endl;
+void OsmDiskTilesZoomDir::GetAvailable(uint &tilesZoom,
+		bool &tileBoundsSet,
+		int &xMin, int &xMax, int &yMin, int &yMax)
+{
+	tilesZoom = this->tilesZoom;
+	tileBoundsSet = this->tileBoundsSet;
+	xMin = this->xMin;
+	xMax = this->xMax;
+	yMin = this->yMin;
+	yMax = this->yMax;
+}
 
-	if(tileBoundsSet)
-		clippingBox = Box(geom::make<Point>(tilex2lon(xMin, tilesZoom), tiley2lat(yMax+1, tilesZoom)),
-		              geom::make<Point>(tilex2lon(xMax+1, tilesZoom), tiley2lat(yMin, tilesZoom)));
+void OsmDiskTilesZoomDir::GetTile(uint zoom, int x, int y, class IDataStreamHandler *output)
+{
+	if(zoom != this->tilesZoom)
+		throw runtime_error("Tiles can only be accessed at the zoom returned by GetAvailable");
 
-	return tileBoundsSet;
+	// ----	Read PBF file
+
+	path inputFile(this->basePath);
+	inputFile /= to_string(this->tilesZoom);
+	inputFile /= to_string(x); 
+	inputFile /= to_string(y) + ".pbf";
+	//cout << inputFile << endl;
+
+	std::filebuf infi;
+	infi.open(inputFile.string(), std::ios::in);
+	LoadFromPbf(infi, output);
 }
 
 // ********************************************
@@ -113,6 +127,11 @@ uint OsmDiskTmpTiles::GetBaseZoom()
 	return tileIndex.GetBaseZoom();
 }
 
+bool OsmDiskTmpTiles::GetAvailableTileExtent(Box &clippingBox)
+{
+	return false;
+}
+
 // ********************************************
 
 OsmDiskTiles::OsmDiskTiles(const std::string &basePath,
@@ -127,7 +146,19 @@ OsmDiskTiles::OsmDiskTiles(const std::string &basePath,
 	layers(layers),
 	shpData(shpData)
 {
-	CheckAvailableDiskTiles(basePath, tilesZoom,
+	//Construct decode pipeline for disk tile input
+	path basePath2(basePath);
+	if(is_directory(basePath2))
+	{
+		inTiles = make_shared<OsmDiskTilesZoomDir>(basePath);
+	}
+	else
+	{
+		
+	}
+
+	//Check what area is available
+	inTiles->GetAvailable(tilesZoom,
 		tileBoundsSet,
 		xMin, xMax, yMin, yMax);
 
@@ -172,6 +203,8 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 		TileCoordinates srcIndex1(dstIndex.x*scale, dstIndex.y*scale);
 		TileCoordinates srcIndex2((dstIndex.x+1)*scale, (dstIndex.y+1)*scale);
 
+		osmLuaProcessing.readPreprocessing = true;
+		osmLuaProcessing.startOsmData();
 		for(int x=srcIndex1.x; x<srcIndex2.x; x++)
 		{
 			if(x < xMin or x > xMax) continue;
@@ -180,19 +213,23 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 			{
 				if(y < yMin or y > yMax) continue;
 
-				// ----	Read PBF file
-	
-				path inputFile(basePath);
-				inputFile /= to_string(tilesZoom);
-				inputFile /= to_string(x); 
-				inputFile /= to_string(y) + ".pbf";
-				cout << inputFile << endl;
-
-				std::filebuf infi;
-				infi.open(inputFile.string(), std::ios::in);
-				LoadFromPbf(infi, &osmLuaProcessing);
+				inTiles->GetTile(tilesZoom, x, y, &osmLuaProcessing);
 			}
 		}
+
+		osmLuaProcessing.readPreprocessing = false;
+		for(int x=srcIndex1.x; x<srcIndex2.x; x++)
+		{
+			if(x < xMin or x > xMax) continue;
+
+			for(int y=srcIndex1.y; y<srcIndex2.y; y++)
+			{
+				if(y < yMin or y > yMax) continue;
+
+				inTiles->GetTile(tilesZoom, x, y, &osmLuaProcessing);
+			}
+		}
+
 	}
 	else
 	{
@@ -208,27 +245,14 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 
 		if(tilex < xMin or tilex > xMax or tiley < yMin or tiley > yMax) return;
 
-		// ----	Read PBF file
+		// ----	Read tile file
 	
-		path inputFile(basePath);
-		inputFile /= to_string(tilesZoom);
-		inputFile /= to_string(tilex); 
-		inputFile /= to_string(tiley) + ".pbf";
-		cout << inputFile << endl;
-
-		std::filebuf infi;
-
 		osmLuaProcessing.readPreprocessing = true;
 		osmLuaProcessing.startOsmData();
-		infi.open(inputFile.string(), std::ios::in);
-		std::shared_ptr<class OsmDecoder> decoder = DecoderOsmFactory(infi, inputFile.string());
-		LoadFromDecoder(infi, decoder.get(), &osmLuaProcessing);
+		inTiles->GetTile(tilesZoom, tilex, tiley, &osmLuaProcessing);
 
 		osmLuaProcessing.readPreprocessing = false;
-		infi.pubseekpos(0);
-		decoder = DecoderOsmFactory(infi, inputFile.string());
-		LoadFromDecoder(infi, decoder.get(), &osmLuaProcessing);
-
+		inTiles->GetTile(tilesZoom, tilex, tiley, &osmLuaProcessing);
 	}
 
 	tmpTiles.tileIndex.GetTileData(dstIndex, zoom, dstTile);
@@ -246,3 +270,28 @@ uint OsmDiskTiles::GetBaseZoom()
 	//This value should be unused
 	return tilesZoom;
 }
+
+bool OsmDiskTiles::GetAvailableTileExtent(Box &clippingBox)
+{
+	uint tilesZoom = 0;
+	bool tileBoundsSet = false;
+	int xMin=0, xMax=0, yMin=0, yMax=0;
+
+	inTiles->GetAvailable(tilesZoom,
+		tileBoundsSet,
+		xMin, xMax, yMin, yMax);
+
+	cout << tilesZoom << endl;
+	cout << "disk tile extent x " << xMin << "," << xMax << endl;
+	cout << "y " << yMin << "," << yMax << endl;
+
+	if(tileBoundsSet)
+		clippingBox = Box(geom::make<Point>(tilex2lon(xMin, tilesZoom), tiley2lat(yMax+1, tilesZoom)),
+		              geom::make<Point>(tilex2lon(xMax+1, tilesZoom), tiley2lat(yMin, tilesZoom)));
+
+	cout << "QQ extent " << clippingBox.min_corner().get<0>() <<","<< clippingBox.min_corner().get<1>() \
+		<<","<< clippingBox.max_corner().get<0>() <<","<< clippingBox.max_corner().get<1>() << endl;
+
+	return tileBoundsSet;
+}
+

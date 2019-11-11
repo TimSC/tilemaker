@@ -9,6 +9,41 @@ bool CheckAvailableDiskTileExtent(const std::string &basePath,
 	Box &clippingBox);
 
 /**
+ * Collection of tile at various zooms
+ */
+class OsmDiskTilesZoom
+{
+public:
+	OsmDiskTilesZoom() {};
+	virtual ~OsmDiskTilesZoom() {};
+
+	virtual void GetAvailable(uint &tilesZoom,
+		bool &tileBoundsSet,
+		int &xMin, int &xMax, int &yMin, int &yMax) {};
+
+	virtual void GetTile(uint zoom, int x, int y, class IDataStreamHandler *output) {};
+};
+
+class OsmDiskTilesZoomDir : public OsmDiskTilesZoom
+{
+private:
+	std::string basePath;
+	uint tilesZoom;
+	bool tileBoundsSet;
+	int xMin, xMax, yMin, yMax;
+
+public:
+	OsmDiskTilesZoomDir(std::string pth);
+	virtual ~OsmDiskTilesZoomDir();
+
+	virtual void GetAvailable(uint &tilesZoom,
+		bool &tileBoundsSet,
+		int &xMin, int &xMax, int &yMin, int &yMax);
+
+	virtual void GetTile(uint zoom, int x, int y, class IDataStreamHandler *output);
+};
+
+/**
  * \brief Used by OsmDiskTiles has temporary storage while processing one or more tiles in a lazy fashion.
  */
 class OsmDiskTmpTiles : public TileDataSource
@@ -24,6 +59,8 @@ public:
 	virtual void AddObject(TileCoordinates index, OutputObjectRef oo);
 
 	virtual uint GetBaseZoom();
+
+	virtual bool GetAvailableTileExtent(Box &clippingBox);
 
 	class TileIndex tileIndex;
 
@@ -54,6 +91,8 @@ public:
 
 	virtual uint GetBaseZoom();
 
+	virtual bool GetAvailableTileExtent(Box &clippingBox);
+
 private:
 	//This variables are generally safe for multiple threads to read, but not to write. (They are const anyway.)
 
@@ -66,6 +105,7 @@ private:
 
 	bool tileBoundsSet;
 	int xMin, xMax, yMin, yMax;
+	std::shared_ptr <class OsmDiskTilesZoom> inTiles;
 };
 
 #endif //_OSM_DISK_TILES

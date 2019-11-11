@@ -118,43 +118,11 @@ int main(int argc, char* argv[]) {
 	if (!boost::filesystem::exists(jsonFile)) { cerr << "Couldn't open .json config: " << jsonFile << endl; return -1; }
 	if (!boost::filesystem::exists(luaFile )) { cerr << "Couldn't open .lua script: "  << luaFile  << endl; return -1; }
 
+	// ----	Read JSON config
+
 	bool hasClippingBox = false;
 	string clippingBoxSrc;
 	Box clippingBox;
-
-	if(!tiledInput)
-	{
-		// ----	Read bounding box from first .pbf
-		double minLon=0.0, maxLon=0.0, minLat=0.0, maxLat=0.0;
-
-		std::filebuf infi;
-		infi.open(inputFiles[0], std::ios::in);
-		class FindBbox findBbox;
-		std::shared_ptr<class OsmDecoder> decoder = DecoderOsmFactory(infi, inputFiles[0]);
-		LoadFromDecoder(infi, decoder.get(), &findBbox);
-
-		hasClippingBox = findBbox.bboxFound;
-		minLon = findBbox.x1;
-		maxLon = findBbox.y1;
-		minLat = findBbox.x2;
-		maxLat = findBbox.y2;
-		cout << minLon <<"," << maxLon << "," << minLat << "," << maxLat << endl;
-
-		cout << inputFiles[0] << endl;
-		clippingBoxSrc = "first pbf file";
-		clippingBox = Box(geom::make<Point>(minLon, maxLon),
-			              geom::make<Point>(minLat, maxLat)); //This looks very wrong, implies bug elsewhere
-	}
-	else
-	{
-		clippingBoxSrc = "tiles on disk";
-		hasClippingBox = CheckAvailableDiskTileExtent(inputFiles[0], clippingBox);
-	}
-
-	cout << "extent from " << clippingBoxSrc << ":" << clippingBox.min_corner().get<0>() <<","<< clippingBox.min_corner().get<1>() \
-		<<","<< clippingBox.max_corner().get<0>() <<","<< clippingBox.max_corner().get<1>() << endl;
-
-	// ----	Read JSON config
 
 	rapidjson::Document jsonConfig;
 	class Config config;
@@ -181,6 +149,44 @@ int main(int argc, char* argv[]) {
 		cerr << "Couldn't find expected details in JSON file." << endl;
 		return -1;
 	}
+
+	// ---- Load external shp files
+
+	class LayerDefinition layers(config.layers);
+	class ShpDiskTiles shpTiles(config.baseZoom, layers);
+	//class ShpMemTiles shpTiles(config.baseZoom);
+	shpTiles.Load(layers, hasClippingBox, clippingBox);
+
+	// For each tile, objects to be used in processing
+
+	shared_ptr<class TileDataSource> osmTiles;
+	if(!tiledInput)
+	{
+		osmTiles.reset(new OsmMemTiles(config.baseZoom,
+			inputFiles,
+			config,
+			luaFile,
+			layers,	
+			shpTiles));
+
+		clippingBoxSrc = "first pbf file";
+	}
+	else
+	{
+		osmTiles.reset(new OsmDiskTiles(inputFiles[0],
+			config,
+			luaFile,
+			layers,	
+			shpTiles));
+
+		clippingBoxSrc = "tiles on disk";
+	}
+
+	hasClippingBox = osmTiles->GetAvailableTileExtent(clippingBox);
+
+	cout << "extent from " << clippingBoxSrc << ":" << clippingBox.min_corner().get<0>() <<","<< clippingBox.min_corner().get<1>() \
+		<<","<< clippingBox.max_corner().get<0>() <<","<< clippingBox.max_corner().get<1>() << endl;
+
 
 	/* ----	Command line options override config settings
 	 * 
@@ -221,30 +227,6 @@ int main(int argc, char* argv[]) {
 	cout << "clipping to " << config.minLon <<","<< config.minLat <<","<< config.maxLon <<","<< config.maxLat << endl;
 	if(vm.count("combine")>0)
 		config.combineSimilarObjs = combineSimilarObjs;
-
-	// ---- Load external shp files
-
-	class LayerDefinition layers(config.layers);
-	class ShpDiskTiles shpTiles(config.baseZoom, layers);
-	//class ShpMemTiles shpTiles(config.baseZoom);
-	shpTiles.Load(layers, hasClippingBox, clippingBox);
-
-	// For each tile, objects to be used in processing
-
-	shared_ptr<class TileDataSource> osmTiles;
-	if(!tiledInput)
-		osmTiles.reset(new OsmMemTiles(config.baseZoom,
-			inputFiles,
-			config,
-			luaFile,
-			layers,	
-			shpTiles));
-	else
-		osmTiles.reset(new OsmDiskTiles(inputFiles[0],
-			config,
-			luaFile,
-			layers,	
-			shpTiles));
 
 	// ----	Initialise SharedData
 	std::vector<class TileDataSource *> sources = {osmTiles.get(), &shpTiles};

@@ -31,10 +31,13 @@ public:
 
 	virtual uint GetBaseZoom();
 
+	virtual bool GetAvailableTileExtent(Box &clippingBox);
+
 private:
 	//This variables are generally safe for multiple threads to read, but not to write.
 
 	class TileIndex tileIndex;
+	const std::vector<std::string> inputFiles;
 };
 
 #endif //_OSM_MEM_TILES

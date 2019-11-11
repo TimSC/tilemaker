@@ -1,3 +1,6 @@
 [submodule "cppo5m"]
 	path = cppo5m
 	url = git@github.com:TimSC/cppo5m.git
+[submodule "cppGzip"]
+	path = cppGzip
+	url = https://github.com/TimSC/cppGzip.git
