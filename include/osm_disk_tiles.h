@@ -68,7 +68,7 @@ private:
 	std::filebuf infi;
 	std::shared_ptr<class SeekableTarRead> seekableTarRead;
 	std::map<int, std::shared_ptr<class SeekableTarEntry> > tarEntries;
-	std::map<int, std::shared_ptr<class DecodeGzip> > colTarDec;
+	std::map<int, std::shared_ptr<class DecodeGzipFastSeek> > colTarDec;
 	std::map<int, std::shared_ptr<class SeekableTarRead> > colTarReaders;
 
 public:

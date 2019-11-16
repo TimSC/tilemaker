@@ -250,7 +250,10 @@ void OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	if(colit == colTarDec.end())
 	{
 		//Need to decode this column tar
-		colTarDec[x] = make_shared<class DecodeGzip>(*tarEntries[x].get());
+		DecodeGzipIndex index;
+		CreateDecodeGzipIndex(*tarEntries[x].get(), index);
+
+		colTarDec[x] = make_shared<class DecodeGzipFastSeek>(*tarEntries[x].get(), index);
 		colit = colTarDec.find(x);
 	}
 
@@ -265,6 +268,7 @@ void OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	
 	//Search for matching tile in y
 	std::vector<tar_header> &colFileList = colit2->second->fileList;
+	int foundEntry = -1;
 	for(size_t i=0; i<colFileList.size(); i++)
 	{
 		string fina = colFileList[i].name;
@@ -277,15 +281,22 @@ void OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 		int tiley = atoi(basename.c_str());
 		if(tiley == y)
 		{
-			std::shared_ptr<class SeekableTarEntry> tileFi = colit2->second->GetEntry(i);
-
-			LoadFromO5m(*tileFi, output);
-			m.unlock();
-			return;
+			foundEntry = i;
+			break;
 		}
 	}
+	
+	//Extract the relevant data
+	std::stringbuf buff;
+	if(foundEntry != -1)
+		colit2->second->ExtractByIndex(foundEntry, buff);
+	m.unlock();
 
-	m.unlock();	
+	if(foundEntry == -1) return;
+
+	//Decode the data in our own thread
+	buff.pubseekpos(0);
+	LoadFromO5m(buff, output);
 }
 
 // ********************************************
