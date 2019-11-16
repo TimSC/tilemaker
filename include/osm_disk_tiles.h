@@ -3,6 +3,7 @@
 #define _OSM_DISK_TILES
 
 #include <fstream>
+#include <mutex>
 #include "tile_data.h"
 #include "osm_store.h"
 #include "../cppGzip/SeekableTar.h"
@@ -24,6 +25,7 @@ public:
 		bool &tileBoundsSet,
 		int &xMin, int &xMax, int &yMin, int &yMax) {};
 
+	///This must be thread safe!
 	virtual void GetTile(uint zoom, int x, int y, class IDataStreamHandler *output) {};
 };
 
@@ -46,6 +48,7 @@ public:
 		bool &tileBoundsSet,
 		int &xMin, int &xMax, int &yMin, int &yMax);
 
+	///This must be thread safe!
 	virtual void GetTile(uint zoom, int x, int y, class IDataStreamHandler *output);
 };
 
@@ -60,6 +63,8 @@ private:
 	bool tileBoundsSet;
 	int xMin, xMax, yMin, yMax;
 
+	///This must be locked to access any of the variables in this section
+	std::mutex m;
 	std::filebuf infi;
 	std::shared_ptr<class SeekableTarRead> seekableTarRead;
 	std::map<int, std::shared_ptr<class SeekableTarEntry> > tarEntries;
@@ -74,6 +79,7 @@ public:
 		bool &tileBoundsSet,
 		int &xMin, int &xMax, int &yMin, int &yMax);
 
+	///This must be thread safe!
 	virtual void GetTile(uint zoom, int x, int y, class IDataStreamHandler *output);
 };
 

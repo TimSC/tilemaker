@@ -127,6 +127,8 @@ OsmDiskTilesZoomTar::OsmDiskTilesZoomTar(std::string pth) : OsmDiskTilesZoom()
 
 	// Check for available zoom folders, choose the highest zoom
 	this->infi.open(tarPath, std::ios::in | std::ios::binary);
+	if(!this->infi.is_open())
+		throw runtime_error("Error opening tile tar");
 	this->seekableTarRead = make_shared<class SeekableTarRead>(infi);
 	seekableTarRead->BuildIndex();
 	std::vector<tar_header> &fileList = seekableTarRead->fileList;
@@ -242,6 +244,8 @@ void OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	if(xit == tarEntries.end())
 		return; //Out of range in x
 
+	m.lock();
+
 	auto colit = colTarDec.find(x);
 	if(colit == colTarDec.end())
 	{
@@ -273,13 +277,18 @@ void OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 		int tiley = atoi(basename.c_str());
 		if(tiley == y)
 		{
-			cout << "Found! " << x << "," << fina << endl;
-			std::shared_ptr<class SeekableTarEntry> tileFi = colit2->second->GetEntry(i);
-			LoadFromO5m(*tileFi, output);
+			//std::shared_ptr<class SeekableTarEntry> tileFi = colit2->second->GetEntry(i);
+			std::stringbuf buff;
+			colit2->second->ExtractByIndex(i, buff);
+			buff.pubseekpos(0);
+
+			LoadFromO5m(buff, output);
+			m.unlock();
 			return;
 		}
 	}
-	
+
+	m.unlock();	
 }
 
 // ********************************************
