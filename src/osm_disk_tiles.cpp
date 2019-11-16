@@ -277,12 +277,9 @@ void OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 		int tiley = atoi(basename.c_str());
 		if(tiley == y)
 		{
-			//std::shared_ptr<class SeekableTarEntry> tileFi = colit2->second->GetEntry(i);
-			std::stringbuf buff;
-			colit2->second->ExtractByIndex(i, buff);
-			buff.pubseekpos(0);
+			std::shared_ptr<class SeekableTarEntry> tileFi = colit2->second->GetEntry(i);
 
-			LoadFromO5m(buff, output);
+			LoadFromO5m(*tileFi, output);
 			m.unlock();
 			return;
 		}
