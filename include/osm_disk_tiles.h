@@ -4,6 +4,8 @@
 
 #include "tile_data.h"
 #include "osm_store.h"
+#include "../cppGzip/SeekableTar.h"
+#include "../cppGzip/DecodeGzip.h"
 
 bool CheckAvailableDiskTileExtent(const std::string &basePath,
 	Box &clippingBox);
@@ -24,6 +26,9 @@ public:
 	virtual void GetTile(uint zoom, int x, int y, class IDataStreamHandler *output) {};
 };
 
+/**
+ * Reading nested folders of pbf tiles
+ */
 class OsmDiskTilesZoomDir : public OsmDiskTilesZoom
 {
 private:
@@ -37,6 +42,31 @@ public:
 	virtual ~OsmDiskTilesZoomDir();
 
 	virtual void GetAvailable(uint &tilesZoom,
+		bool &tileBoundsSet,
+		int &xMin, int &xMax, int &yMin, int &yMax);
+
+	virtual void GetTile(uint zoom, int x, int y, class IDataStreamHandler *output);
+};
+
+/**
+ * Reading a tar of gzipped columns of pbfs
+ */
+class OsmDiskTilesZoomTar : public OsmDiskTilesZoom
+{
+private:
+	std::string tarPath;
+	uint tilesZoom;
+	bool tileBoundsSet;
+	int xMin, xMax, yMin, yMax;
+
+	std::shared_ptr<class SeekableTarRead> seekableTarRead;
+	std::map<int, std::shared_ptr<class SeekableTarEntry> > tarEntries;
+
+public:
+	OsmDiskTilesZoomTar(std::string pth);
+	virtual ~OsmDiskTilesZoomTar();
+
+	virtual void GetAvailable(uint &tarPath,
 		bool &tileBoundsSet,
 		int &xMin, int &xMax, int &yMin, int &yMax);
 
@@ -96,15 +126,12 @@ public:
 private:
 	//This variables are generally safe for multiple threads to read, but not to write. (They are const anyway.)
 
-	uint tilesZoom;
 	const std::string basePath;
 	const class Config &config;
 	const std::string luaFile;
 	const class LayerDefinition &layers;
 	const class TileDataSource &shpData;
 
-	bool tileBoundsSet;
-	int xMin, xMax, yMin, yMax;
 	std::shared_ptr <class OsmDiskTilesZoom> inTiles;
 };
 

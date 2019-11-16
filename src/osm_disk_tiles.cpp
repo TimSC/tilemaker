@@ -14,6 +14,14 @@ string PathTrailing(const path &in)
 	return out;
 }
 
+vector<string> PathToStringVector(path &p)
+{
+	vector<string> out;
+	for(auto it=p.begin(); it!=p.end(); it++)
+		out.push_back(it->string());
+	return out;
+}
+
 // *****************************************
 
 OsmDiskTilesZoomDir::OsmDiskTilesZoomDir(std::string pth) : OsmDiskTilesZoom()
@@ -104,8 +112,134 @@ void OsmDiskTilesZoomDir::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	//cout << inputFile << endl;
 
 	std::filebuf infi;
-	infi.open(inputFile.string(), std::ios::in);
+	infi.open(inputFile.string(), std::ios::in | std::ios::binary);
 	LoadFromPbf(infi, output);
+}
+
+// *****************************************
+
+OsmDiskTilesZoomTar::OsmDiskTilesZoomTar(std::string pth) : OsmDiskTilesZoom()
+{
+	tarPath = pth;
+	tilesZoom = 0;
+	tileBoundsSet = false;
+	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
+
+	// Check for available zoom folders, choose the highest zoom
+	std::filebuf infi;
+	infi.open(tarPath, std::ios::in | std::ios::binary);
+	this->seekableTarRead = make_shared<class SeekableTarRead>(infi);
+	seekableTarRead->BuildIndex();
+	std::vector<tar_header> &fileList = seekableTarRead->fileList;
+
+	// Determine zoom of available tile files
+	int maxZoom = -1;
+	vector<int> zoomList;
+	vector<string> filenameList;
+	for(size_t i=0; i<fileList.size(); i++)
+	{
+		path p (fileList[i].name);
+		vector<string> psv = PathToStringVector(p);
+		if(psv.size() != 2) continue;
+		int z = atoi(psv[0].c_str());
+		if(maxZoom < z)
+			maxZoom = z;
+		zoomList.push_back(maxZoom);
+		filenameList.push_back(psv[1]);
+	}
+
+	if(maxZoom < 0)
+		throw runtime_error("Zoom of tar could not be determined");
+	this->tilesZoom = maxZoom;
+
+	// Determine extent of available tile files
+	for(size_t i=0; i<zoomList.size(); i++)
+	{
+		if(zoomList[i] != this->tilesZoom) 
+			continue;
+		size_t dot = filenameList[i].find(".");
+		if(dot == string::npos) continue;
+		string ext = filenameList[i].substr(dot);
+		if(ext!=".tar.gz") continue;
+
+		string basename = filenameList[i].substr(0, dot);
+		int tilex = atoi(basename.c_str());
+		if(!tileBoundsSet)
+		{
+			this->xMin = tilex;
+			this->xMax = tilex;
+			tileBoundsSet = true;
+		}
+		else
+		{
+			if(tilex < xMin) this->xMin = tilex;
+			if(tilex > xMax) this->xMax = tilex;
+		}
+
+		this->tarEntries[tilex] = seekableTarRead->GetEntry(i);
+	}
+
+	if(this->tarEntries.size() == 0 || !tileBoundsSet)
+		throw runtime_error("Extent of tar tiles could not be determined in x direction");
+
+	//Check tile extent in column
+	std::shared_ptr<class SeekableTarEntry> firstTile = this->tarEntries[0];
+	class DecodeGzip dec(*firstTile);
+	class SeekableTarRead colReader(dec);
+	colReader.BuildIndex();
+
+	this->tileBoundsSet = false;
+	std::vector<tar_header> &colFileList = colReader.fileList;
+	for(size_t i=0; i<colFileList.size(); i++)
+	{
+		string fina = colFileList[i].name;
+		size_t dot = fina.find(".");
+		if(dot == string::npos) continue;
+		string ext = fina.substr(dot);
+		if(ext != ".o5m") continue;
+		string basename = fina.substr(0, dot);
+
+		int tiley = atoi(basename.c_str());
+		if(!this->tileBoundsSet)
+		{
+			this->yMin = tiley;
+			this->yMax = tiley;
+			this->tileBoundsSet = true;
+		}
+		else
+		{
+			if(tiley < yMin) this->yMin = tiley;
+			if(tiley > yMax) this->yMax = tiley;
+		}
+
+	}
+	if(colFileList.size() == 0 || !tileBoundsSet)
+		throw runtime_error("Extent of tar tiles could not be determined in y direction");
+}
+
+OsmDiskTilesZoomTar::~OsmDiskTilesZoomTar()
+{
+
+}
+
+void OsmDiskTilesZoomTar::GetAvailable(uint &tilesZoom,
+		bool &tileBoundsSet,
+		int &xMin, int &xMax, int &yMin, int &yMax)
+{
+	tilesZoom = this->tilesZoom;
+	tileBoundsSet = this->tileBoundsSet;
+	xMin = this->xMin;
+	xMax = this->xMax;
+	yMin = this->yMin;
+	yMax = this->yMax;
+}
+
+void OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHandler *output)
+{
+	if(zoom != this->tilesZoom)
+		throw runtime_error("Tiles can only be accessed at the zoom returned by GetAvailable");
+
+	cout << zoom << "," << x << "," << y << endl;
 }
 
 // ********************************************
@@ -114,7 +248,7 @@ OsmDiskTmpTiles::OsmDiskTmpTiles(uint baseZoom):
 	TileDataSource(),
 	tileIndex(baseZoom)
 {
-
+	
 }
 
 void OsmDiskTmpTiles::AddObject(TileCoordinates index, OutputObjectRef oo)
@@ -154,8 +288,17 @@ OsmDiskTiles::OsmDiskTiles(const std::string &basePath,
 	}
 	else
 	{
-		
+		path p (basePath);
+		if(p.extension().string() == ".tar")
+			inTiles = make_shared<OsmDiskTilesZoomTar>(basePath);
 	}
+
+	if(!inTiles)
+		throw runtime_error("Input tile format not recognized");
+
+	uint tilesZoom = 0;
+	bool tileBoundsSet = false;
+	int xMin=0, xMax=0, yMin=0, yMax=0;
 
 	//Check what area is available
 	inTiles->GetAvailable(tilesZoom,
@@ -183,6 +326,14 @@ OsmDiskTiles::OsmDiskTiles(const std::string &basePath,
 
 void OsmDiskTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
 {
+	uint tilesZoom = 0;
+	bool tileBoundsSet = false;
+	int xMin=0, xMax=0, yMin=0, yMax=0;
+
+	inTiles->GetAvailable(tilesZoom,
+		tileBoundsSet,
+		xMin, xMax, yMin, yMax);
+
 	::GenerateTileListAtZoom(xMin, xMax, yMin, yMax, 
 		tilesZoom, zoom, dstCoords);
 }
@@ -196,6 +347,14 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 	OsmLuaProcessing osmLuaProcessing(config, layersTmp, luaFile, 
 		shpData, 
 		tmpTiles);
+
+	uint tilesZoom = 0;
+	bool tileBoundsSet = false;
+	int xMin=0, xMax=0, yMin=0, yMax=0;
+
+	inTiles->GetAvailable(tilesZoom,
+		tileBoundsSet,
+		xMin, xMax, yMin, yMax);
 
 	if(zoom < tilesZoom)
 	{
@@ -267,6 +426,14 @@ void OsmDiskTiles::AddObject(TileCoordinates index, OutputObjectRef oo)
 
 uint OsmDiskTiles::GetBaseZoom()
 {
+	uint tilesZoom = 0;
+	bool tileBoundsSet = false;
+	int xMin=0, xMax=0, yMin=0, yMax=0;
+
+	inTiles->GetAvailable(tilesZoom,
+		tileBoundsSet,
+		xMin, xMax, yMin, yMax);
+
 	//This value should be unused
 	return tilesZoom;
 }
@@ -281,16 +448,9 @@ bool OsmDiskTiles::GetAvailableTileExtent(Box &clippingBox)
 		tileBoundsSet,
 		xMin, xMax, yMin, yMax);
 
-	cout << tilesZoom << endl;
-	cout << "disk tile extent x " << xMin << "," << xMax << endl;
-	cout << "y " << yMin << "," << yMax << endl;
-
 	if(tileBoundsSet)
 		clippingBox = Box(geom::make<Point>(tilex2lon(xMin, tilesZoom), tiley2lat(yMax+1, tilesZoom)),
 		              geom::make<Point>(tilex2lon(xMax+1, tilesZoom), tiley2lat(yMin, tilesZoom)));
-
-	cout << "QQ extent " << clippingBox.min_corner().get<0>() <<","<< clippingBox.min_corner().get<1>() \
-		<<","<< clippingBox.max_corner().get<0>() <<","<< clippingBox.max_corner().get<1>() << endl;
 
 	return tileBoundsSet;
 }
