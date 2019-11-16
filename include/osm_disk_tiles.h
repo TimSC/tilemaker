@@ -2,6 +2,7 @@
 #ifndef _OSM_DISK_TILES
 #define _OSM_DISK_TILES
 
+#include <fstream>
 #include "tile_data.h"
 #include "osm_store.h"
 #include "../cppGzip/SeekableTar.h"
@@ -59,8 +60,11 @@ private:
 	bool tileBoundsSet;
 	int xMin, xMax, yMin, yMax;
 
+	std::filebuf infi;
 	std::shared_ptr<class SeekableTarRead> seekableTarRead;
 	std::map<int, std::shared_ptr<class SeekableTarEntry> > tarEntries;
+	std::map<int, std::shared_ptr<class DecodeGzip> > colTarDec;
+	std::map<int, std::shared_ptr<class SeekableTarRead> > colTarReaders;
 
 public:
 	OsmDiskTilesZoomTar(std::string pth);
