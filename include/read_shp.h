@@ -9,7 +9,7 @@
 #include "geomtypes.h"
 
 // Shapelib
-#include "shapefil.h"
+#include <shapefil.h>
 
 typedef boost::variant< int, double, std::string > ShpFieldValue;
 typedef std::map<std::string, ShpFieldValue> ShpFieldValueMap;
@@ -48,7 +48,7 @@ public:
 	virtual ~ShapefileReader();	
 
 	// produce call back events for all objects within the specified bounding box
-	void ReadAll(const Box &clippingBox, class ShapeFileResultsDecoder &outObj);
+	void ReadAllInBox(const Box &clippingBox, class ShapeFileResultsDecoder &outObj);
 };
 
 #endif //_READ_SHP_H

@@ -68,7 +68,7 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 			sfr = itr->second;
 		mtx.unlock();
 		
-		sfr->ReadAll(projClippingBox, converter);
+		sfr->ReadAllInBox(projClippingBox, converter);
 	}
 
 	tmpTileIndex.GetTileData(dstIndex, zoom, dstTile);
@@ -106,6 +106,8 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 	this->yMin = lat2tiley(clippingBox.max_corner().get<1>(), baseZoom)-1;
 	this->yMax = lat2tiley(clippingBox.min_corner().get<1>(), baseZoom);
 
+	cout << "prepareShapefile" << endl;
+
 	ShapeFileToLayers layerConverter(layers);
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
@@ -127,6 +129,8 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 		}
 	}
 
+	cout << "Indexing shapefile" << endl;
+
 	//Read shapefile layer into a simple index
 	ShapeFileToBareTileIndex converterBareTileIndex(this->bareTileIndex, layers);
 	Box projClippingBox = Box(geom::make<Point>(clippingBox.min_corner().get<0>(), lat2latp(clippingBox.min_corner().get<1>())),
@@ -147,9 +151,11 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 					  columns,
 		              indexName);
 
-			sfr->ReadAll(projClippingBox, converterBareTileIndex);
+			sfr->ReadAllInBox(projClippingBox, converterBareTileIndex);
 		}
 	}
+
+	cout << "Reading all shapes" << endl;
 
 	//TODO remove this up front loading of shapefile data
 	ShapeFileToTileIndexCached converter(this->tileIndex, layers);
@@ -167,7 +173,7 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 			class ShapefileReader shapefileReader(filename,
 						  columns,
 			              indexName);
-			shapefileReader.ReadAll(projClippingBox, converter);
+			shapefileReader.ReadAllInBox(projClippingBox, converter);
 		}
 	}
 }

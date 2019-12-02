@@ -80,7 +80,7 @@ void ShpMemTiles::Load(class LayerDefinition &layers,
 			class ShapefileReader shapefileReader(filename,
 						  columns,
 			              indexName);
-			shapefileReader.ReadAll(projClippingBox, converter);
+			shapefileReader.ReadAllInBox(projClippingBox, converter);
 		}
 	}
 }

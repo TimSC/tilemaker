@@ -144,7 +144,10 @@ void readShapeEntity(int i, SHPHandle shp, DBFHandle dbf,
 		shapeBox.max_corner().get<0>() < clippingBox.min_corner().get<0>() or 
 		shapeBox.min_corner().get<1>() > clippingBox.max_corner().get<1>() or
 		shapeBox.max_corner().get<1>() < clippingBox.min_corner().get<1>())
+	{
+		SHPDestroyObject(shape);
 		return;
+	}
 
 	int shapeType = shape->nSHPType;	// 1=point, 3=polyline, 5=(multi)polygon [8=multipoint, 11+=3D]
 
@@ -256,6 +259,7 @@ void readShapeEntity(int i, SHPHandle shp, DBFHandle dbf,
 		cerr << "Shapefile entity #" << i << " type " << shapeType << " not supported" << endl;
 	}
 
+	SHPDestroyObject(shape);
 }
 
 // *************************************************************
@@ -290,7 +294,7 @@ ShapefileReader::~ShapefileReader()
 	DBFClose(dbf);
 }
 
-void ShapefileReader::ReadAll(const Box &clippingBox, class ShapeFileResultsDecoder &outObj) 
+void ShapefileReader::ReadAllInBox(const Box &clippingBox, class ShapeFileResultsDecoder &outObj) 
 {
 	for (int i=0; i<numEntities; i++) {
 		readShapeEntity(i, shp, dbf, 

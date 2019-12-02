@@ -167,6 +167,7 @@ void BareTileIndex::AddObject(const class LayerDef &layer, uint_least8_t layerNu
 		indices.at(layerName).insert(std::make_pair(box, id));
 		if(hasName)
 			cachedGeometryNames[id]=name;
+		if((indices.size() % 1000)==0) cout << indices.size() << endl;
 	}
 }
 

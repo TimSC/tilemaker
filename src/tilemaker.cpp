@@ -150,12 +150,42 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
+
+	/* ----	Command line options override config settings
+	 * 
+	 * The clipping box is determined, in order of precidence:
+	 * 1) command line argument (highest)
+	 * 2) json config file setting
+	 * 3) extent of first pbf input file
+	 */
+
+	stringstream argClippingBoxSs(argClippingBoxStr);
+	vector<double> argClippingBox;
+	while( argClippingBoxSs.good() )
+	{
+		string substr;
+		getline( argClippingBoxSs, substr, ',' );
+		argClippingBox.push_back( atof(substr.c_str()) );
+	}
+	if(argClippingBox.size() >= 4) //(left,bottom,right,top)
+	{
+		hasClippingBox = true;
+		clippingBox.min_corner().set<0>(argClippingBox[0]);
+		clippingBox.max_corner().set<0>(argClippingBox[2]);
+		clippingBox.min_corner().set<1>(argClippingBox[1]);
+		clippingBox.max_corner().set<1>(argClippingBox[3]);
+		clippingBoxSrc = "command line arguments";
+	}
+
+
 	// ---- Load external shp files
 
 	class LayerDefinition layers(config.layers);
 	class ShpDiskTiles shpTiles(config.baseZoom, layers);
 	//class ShpMemTiles shpTiles(config.baseZoom);
+	cout << "Loading shapefile data" << endl;
 	shpTiles.Load(layers, hasClippingBox, clippingBox);
+	cout << "...done" << endl;
 
 	// For each tile, objects to be used in processing
 
@@ -187,32 +217,6 @@ int main(int argc, char* argv[]) {
 	cout << "extent from " << clippingBoxSrc << ":" << clippingBox.min_corner().get<0>() <<","<< clippingBox.min_corner().get<1>() \
 		<<","<< clippingBox.max_corner().get<0>() <<","<< clippingBox.max_corner().get<1>() << endl;
 
-
-	/* ----	Command line options override config settings
-	 * 
-	 * The clipping box is determined, in order of precidence:
-	 * 1) command line argument (highest)
-	 * 2) json config file setting
-	 * 3) extent of first pbf input file
-	 */
-
-	stringstream argClippingBoxSs(argClippingBoxStr);
-	vector<double> argClippingBox;
-	while( argClippingBoxSs.good() )
-	{
-		string substr;
-		getline( argClippingBoxSs, substr, ',' );
-		argClippingBox.push_back( atof(substr.c_str()) );
-	}
-	if(argClippingBox.size() >= 4) //(left,bottom,right,top)
-	{
-		hasClippingBox = true;
-		clippingBox.min_corner().set<0>(argClippingBox[0]);
-		clippingBox.max_corner().set<0>(argClippingBox[2]);
-		clippingBox.min_corner().set<1>(argClippingBox[1]);
-		clippingBox.max_corner().set<1>(argClippingBox[3]);
-		clippingBoxSrc = "command line arguments";
-	}
 
 	// Copy final clipping box back into config
 	if(hasClippingBox)
