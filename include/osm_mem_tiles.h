@@ -21,9 +21,6 @@ public:
 		const class TileDataSource &shpMemTiles);
 
 	///This must be thread safe!
-	//virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords);
-
-	///This must be thread safe!
 	virtual void GetTileData(TileCoordinates dstIndex, uint zoom, 
 		std::vector<OutputObjectRef> &dstTile);
 

@@ -18,12 +18,6 @@ ShpDiskTiles::~ShpDiskTiles()
 {
 	shapefileReaderThreadMap.clear();
 }
-/*
-void ShpDiskTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
-{
-	::GenerateTileListAtZoom(xMin, xMax, yMin, yMax, 
-		baseZoom, zoom, dstCoords);
-}*/
 
 void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom, 
 	std::vector<OutputObjectRef> &dstTile)

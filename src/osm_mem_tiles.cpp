@@ -40,11 +40,6 @@ OsmMemTiles::OsmMemTiles(uint baseZoom,
 	}
 }
 
-/*void OsmMemTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
-{
-	tileIndex.GenerateTileList(zoom, dstCoords);
-}*/
-
 void OsmMemTiles::GetTileData(TileCoordinates dstIndex, uint zoom, 
 	std::vector<OutputObjectRef> &dstTile)
 {

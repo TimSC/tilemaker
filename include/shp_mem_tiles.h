@@ -10,8 +10,6 @@ class ShpMemTiles : public TileDataSource
 public:
 	ShpMemTiles(uint baseZoom);
 
-	//virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords);
-
 	virtual void GetTileData(TileCoordinates dstIndex, uint zoom, 
 		std::vector<OutputObjectRef> &dstTile);
 

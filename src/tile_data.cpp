@@ -460,54 +460,6 @@ void TileData::SetZoom(uint zoom, Box clippingBox)
 			tileCoordinates.insert(TileCoordinates(x, y));
 }
 
-// **************************************************
-/*
-void GenerateTileListAtZoom(int xMin, int xMax, int yMin, int yMax, 
-	uint baseZoom, uint requestZoom, TileCoordinatesSet &dstCoords)
-{
-	if (requestZoom==baseZoom) {
-		// at native zoom level
-		for (int x=xMin; x<=xMax; x++)
-			for (int y=yMin; y<=yMax; y++)
-				dstCoords.insert(TileCoordinates(x, y));
-	} else {
-		// otherwise, we need to run through the native zoom list, and assign each way
-		// to a tile at our zoom level
-		if(requestZoom < baseZoom)
-		{
-			int scale = pow(2, baseZoom-requestZoom);
-			for (int x=xMin; x<=xMax; x++)
-			{
-				TileCoordinate tilex = x / scale;
-				for (int y=yMin; y<=yMax; y++)
-				{			
-					TileCoordinate tiley = y / scale;
-					TileCoordinates newIndex(tilex, tiley);
-					dstCoords.insert(newIndex);
-				}
-			}
-		}
-		else
-		{
-			int scale = pow(2, requestZoom-baseZoom);
-			TileCoordinate xMinScaled = xMin * scale;
-			TileCoordinate xMaxScaled = (xMax+1) * scale;
-			TileCoordinate yMinScaled = yMin * scale;
-			TileCoordinate yMaxScaled = (yMax+1) * scale;
-			
-			for (int x=xMinScaled; x<xMaxScaled; x++)
-			{
-				for (int y=yMinScaled; y<yMaxScaled; y++)
-				{			
-					TileCoordinates newIndex(x, y);
-					dstCoords.insert(newIndex);
-				}
-			}
-		}
-
-	}
-}
-*/
 // ******************************************************
 
 TileDataSource::TileDataSource()

@@ -10,11 +10,7 @@ ShpMemTiles::ShpMemTiles(uint baseZoom):
 {
 
 }
-/*
-void ShpMemTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
-{
-	tileIndex.GenerateTileList(zoom, dstCoords);
-}*/
+
 
 void ShpMemTiles::GetTileData(TileCoordinates dstIndex, uint zoom, 
 	std::vector<OutputObjectRef> &dstTile)

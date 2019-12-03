@@ -221,9 +221,6 @@ private:
 
 // *****************************************
 
-//void GenerateTileListAtZoom(int xMin, int xMax, int yMin, int yMax, 
-//	uint baseZoom, uint requestZoom, TileCoordinatesSet &dstCoords);
-
 class ShapeFileToLayers : public ShapeFileResultsDecoder
 {
 public:
