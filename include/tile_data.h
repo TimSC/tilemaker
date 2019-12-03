@@ -125,7 +125,7 @@ public:
 	virtual ~TileDataSource();
 
 	///This must be thread safe!
-	virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)=0;
+	//virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)=0;
 
 	///This must be thread safe!
 	virtual void GetTileData(TileCoordinates dstIndex, uint zoom, 
@@ -211,7 +211,7 @@ public:
 	///Must be thread safe!
 	size_t GetTilesAtZoomSize();
 
-	void SetZoom(uint zoom);
+	void SetZoom(uint zoom, Box clippingBox);
 
 private:
 	const std::vector<class TileDataSource *> sources;
@@ -221,8 +221,8 @@ private:
 
 // *****************************************
 
-void GenerateTileListAtZoom(int xMin, int xMax, int yMin, int yMax, 
-	uint baseZoom, uint requestZoom, TileCoordinatesSet &dstCoords);
+//void GenerateTileListAtZoom(int xMin, int xMax, int yMin, int yMax, 
+//	uint baseZoom, uint requestZoom, TileCoordinatesSet &dstCoords);
 
 class ShapeFileToLayers : public ShapeFileResultsDecoder
 {

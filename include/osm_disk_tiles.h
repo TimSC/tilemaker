@@ -91,7 +91,7 @@ class OsmDiskTmpTiles : public TileDataSource
 public:
 	OsmDiskTmpTiles(uint baseZoom);
 
-	virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords) {};
+	//virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords) {};
 
 	virtual void GetTileData(TileCoordinates dstIndex, uint zoom, 
 		std::vector<OutputObjectRef> &dstTile) {};
@@ -121,7 +121,7 @@ public:
 		const class TileDataSource &shpData);
 
 	///This must be thread safe!
-	virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords);
+	//virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords);
 
 	///This must be thread safe!
 	virtual void GetTileData(TileCoordinates dstIndex, uint zoom, 

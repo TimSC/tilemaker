@@ -14,7 +14,7 @@ public:
 	ShpDiskTiles(uint baseZoom, const class LayerDefinition &layers);
 	virtual ~ShpDiskTiles();
 
-	virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords);
+	//virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords);
 
 	virtual void GetTileData(TileCoordinates dstIndex, uint zoom, 
 		std::vector<OutputObjectRef> &dstTile);

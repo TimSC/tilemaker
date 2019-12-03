@@ -444,17 +444,24 @@ size_t TileData::GetTilesAtZoomSize()
 	return count;
 }
 
-void TileData::SetZoom(uint zoom)
+void TileData::SetZoom(uint zoom, Box clippingBox)
 {
 	this->zoom = zoom;
 	// Create list of tiles
 	tileCoordinates.clear();
-	for(size_t i=0; i<sources.size(); i++)
-		sources[i]->GenerateTileListAtZoom(zoom, tileCoordinates);
+
+	int xMin = lon2tilex(clippingBox.min_corner().get<0>(), zoom);
+	int xMax = lon2tilex(clippingBox.max_corner().get<0>(), zoom)+1;
+	int yMin = lat2tiley(clippingBox.max_corner().get<1>(), zoom);
+	int yMax = lat2tiley(clippingBox.min_corner().get<1>(), zoom)-1;
+
+	for (int x=xMin; x<=xMax; x++)
+		for (int y=yMin; y<=yMax; y++)
+			tileCoordinates.insert(TileCoordinates(x, y));
 }
 
 // **************************************************
-
+/*
 void GenerateTileListAtZoom(int xMin, int xMax, int yMin, int yMax, 
 	uint baseZoom, uint requestZoom, TileCoordinatesSet &dstCoords)
 {
@@ -500,7 +507,7 @@ void GenerateTileListAtZoom(int xMin, int xMax, int yMin, int yMax,
 
 	}
 }
-
+*/
 // ******************************************************
 
 TileDataSource::TileDataSource()

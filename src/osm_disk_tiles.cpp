@@ -380,7 +380,7 @@ OsmDiskTiles::OsmDiskTiles(const std::string &basePath,
 	cout << "disk tile extent x " << xMin << "," << xMax << endl;
 	cout << "y " << yMin << "," << yMax << endl;
 }
-
+/*
 void OsmDiskTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
 {
 	uint tilesZoom = 0;
@@ -394,7 +394,7 @@ void OsmDiskTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoor
 	::GenerateTileListAtZoom(xMin, xMax, yMin, yMax, 
 		tilesZoom, zoom, dstCoords);
 }
-
+*/
 void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom, 
 	std::vector<OutputObjectRef> &dstTile)
 {
