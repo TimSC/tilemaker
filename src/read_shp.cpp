@@ -305,3 +305,10 @@ void ShapefileReader::ReadAllInBox(const Box &clippingBox, class ShapeFileResult
 	}
 }
 
+void ShapefileReader::ReadIndexInBox(int index, const Box &clippingBox, class ShapeFileResultsDecoder &outObj)
+{
+	readShapeEntity(index, shp, dbf, 
+		columnMap, columnTypeMap,
+		indexField, clippingBox, outObj);	
+}
+

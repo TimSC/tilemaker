@@ -2,6 +2,7 @@
 #include <iostream>
 using namespace std;
 namespace geom = boost::geometry;
+namespace bgi = geom::index;
 #include "read_shp.h"
 
 ShpDiskTiles::ShpDiskTiles(uint baseZoom, const class LayerDefinition &layers):
@@ -68,7 +69,15 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 		mtx.unlock();
 		
 		//TODO avoid reading shapefile again!
-		sfr->ReadAllInBox(projClippingBox, converter);
+		//sfr->ReadAllInBox(projClippingBox, converter);
+
+		//Find relevant shape objects from spatial index
+		RTree &bi = this->bareTileIndex.indices[layer.name];
+		vector<std::pair<geom::model::box<Point>, unsigned int> > result;
+		bi.query(bgi::overlaps(projClippingBox), std::back_inserter(result));
+
+		for(size_t i=0; i<result.size(); i++)
+			sfr->ReadIndexInBox(result[i].second, projClippingBox, converter);
 	}
 
 	tmpTileIndex.GetTileData(dstIndex, zoom, dstTile);
@@ -139,6 +148,9 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 	{
 		// External layer sources
 		const LayerDef &layer = layers.layers[layerNum];
+
+		if(layer.indexed)
+			this->bareTileIndex.CreateNamedLayerIndex(layer.name);
 
 		if (layer.source.size()>0) {
 			converterBareTileIndex.layerNum = layerNum;

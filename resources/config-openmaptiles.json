@@ -23,6 +23,7 @@
 			"source": "/home/tim/Desktop/mapping/coast/coast_20190801004901.shp",
 			"simplify_below": 13, "simplify_level": 0.0003,
 			"write_to": "water",
+			"index": true,
 			"source_columns": ["ct_id","name"]
 		}
 	},
