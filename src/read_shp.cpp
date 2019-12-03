@@ -290,8 +290,10 @@ ShapefileReader::ShapefileReader(const std::string &filename,
 
 ShapefileReader::~ShapefileReader()
 {
-	SHPClose(shp);
-	DBFClose(dbf);
+	if(shp != nullptr)
+		SHPClose(shp);
+	if(dbf != nullptr)
+		DBFClose(dbf);
 }
 
 void ShapefileReader::ReadAllInBox(const Box &clippingBox, class ShapeFileResultsDecoder &outObj) 

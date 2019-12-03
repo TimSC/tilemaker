@@ -14,6 +14,11 @@ ShpDiskTiles::ShpDiskTiles(uint baseZoom, const class LayerDefinition &layers):
 	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
 }
 
+ShpDiskTiles::~ShpDiskTiles()
+{
+	shapefileReaderThreadMap.clear();
+}
+
 void ShpDiskTiles::GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords)
 {
 	::GenerateTileListAtZoom(xMin, xMax, yMin, yMax, 
@@ -68,6 +73,7 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 			sfr = itr->second;
 		mtx.unlock();
 		
+		//TODO avoid reading shapefile again!
 		sfr->ReadAllInBox(projClippingBox, converter);
 	}
 
@@ -182,5 +188,10 @@ std::vector<uint> ShpDiskTiles::verifyIntersectResults(std::vector<IndexValue> &
 {
 	//TODO replace this tricky function
 	return this->tileIndex.verifyIntersectResults(results, p1, p2);
+}
+
+bool ShpDiskTiles::GetAvailableTileExtent(Box &clippingBox, std::string &boxSource)
+{
+	return false;
 }
 

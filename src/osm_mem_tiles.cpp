@@ -61,7 +61,7 @@ uint OsmMemTiles::GetBaseZoom()
 	return tileIndex.GetBaseZoom();
 }
 
-bool OsmMemTiles::GetAvailableTileExtent(Box &clippingBox)
+bool OsmMemTiles::GetAvailableTileExtent(Box &clippingBox, std::string &boxSource)
 {
 	// ----	Read bounding box from first .pbf
 	double minLon=0.0, maxLon=0.0, minLat=0.0, maxLat=0.0;
@@ -80,8 +80,12 @@ bool OsmMemTiles::GetAvailableTileExtent(Box &clippingBox)
 	cout << minLon <<"," << maxLon << "," << minLat << "," << maxLat << endl;
 
 	cout << inputFiles[0] << endl;
-	clippingBox = Box(geom::make<Point>(minLon, maxLon),
-		              geom::make<Point>(minLat, maxLat)); //This looks very wrong, implies bug elsewhere
+	if(hasClippingBox)
+	{
+		clippingBox = Box(geom::make<Point>(minLon, maxLon),
+		              geom::make<Point>(minLat, maxLat)); //This looks very wrong, implies bug elsewhere?
+		boxSource="first data file (OsmMemTiles)";
+	}
 	return hasClippingBox;
 }
 

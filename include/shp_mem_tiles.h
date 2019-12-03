@@ -21,7 +21,7 @@ public:
 
 	virtual uint GetBaseZoom();
 
-	virtual bool GetAvailableTileExtent(Box &clippingBox) {return false;};
+	virtual bool GetAvailableTileExtent(Box &clippingBox, std::string &boxSource) {return false;};
 
 	virtual void Load(class LayerDefinition &layers, 
 		bool hasClippingBox,

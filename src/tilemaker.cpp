@@ -199,7 +199,7 @@ int main(int argc, char* argv[]) {
 			layers,	
 			shpTiles));
 
-		clippingBoxSrc = "first pbf file";
+		//clippingBoxSrc = "first pbf file";
 	}
 	else
 	{
@@ -209,10 +209,17 @@ int main(int argc, char* argv[]) {
 			layers,	
 			shpTiles));
 
-		clippingBoxSrc = "tiles on disk";
+		//clippingBoxSrc = "tiles on disk";
 	}
 
-	hasClippingBox = osmTiles->GetAvailableTileExtent(clippingBox);
+	//hasClippingBox = osmTiles->GetAvailableTileExtent(clippingBox);
+	if(!hasClippingBox)
+	{
+		//If we don't have a clipping box yet, use what is defined by the input data
+		std::string boxSourceName = "XXX";
+		hasClippingBox = osmTiles->GetAvailableTileExtent(clippingBox);
+		if(hasClippingBox) clippingBoxSrc = boxSourceName;
+	}
 
 	cout << "extent from " << clippingBoxSrc << ":" << clippingBox.min_corner().get<0>() <<","<< clippingBox.min_corner().get<1>() \
 		<<","<< clippingBox.max_corner().get<0>() <<","<< clippingBox.max_corner().get<1>() << endl;

@@ -12,6 +12,7 @@ class ShpDiskTiles : public TileDataSource
 {
 public:
 	ShpDiskTiles(uint baseZoom, const class LayerDefinition &layers);
+	virtual ~ShpDiskTiles();
 
 	virtual void GenerateTileListAtZoom(uint zoom, TileCoordinatesSet &dstCoords);
 
@@ -24,7 +25,7 @@ public:
 
 	virtual uint GetBaseZoom();
 
-	virtual bool GetAvailableTileExtent(Box &clippingBox) {return false;};
+	virtual bool GetAvailableTileExtent(Box &clippingBox, std::string &boxSource);
 
 	virtual void Load(class LayerDefinition &layers, 
 		bool hasClippingBox,

@@ -146,7 +146,7 @@ public:
 
 	virtual uint GetBaseZoom()=0;
 
-	virtual bool GetAvailableTileExtent(Box &clippingBox)=0;
+	virtual bool GetAvailableTileExtent(Box &clippingBox, std::string &boxSource)=0;
 };
 
 class ObjectsAtSubLayerIterator : public OutputObjectsConstIt

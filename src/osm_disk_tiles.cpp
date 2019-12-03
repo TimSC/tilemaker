@@ -318,7 +318,7 @@ uint OsmDiskTmpTiles::GetBaseZoom()
 	return tileIndex.GetBaseZoom();
 }
 
-bool OsmDiskTmpTiles::GetAvailableTileExtent(Box &clippingBox)
+bool OsmDiskTmpTiles::GetAvailableTileExtent(Box &clippingBox, std::string &boxSource)
 {
 	return false;
 }
@@ -495,7 +495,7 @@ uint OsmDiskTiles::GetBaseZoom()
 	return tilesZoom;
 }
 
-bool OsmDiskTiles::GetAvailableTileExtent(Box &clippingBox)
+bool OsmDiskTiles::GetAvailableTileExtent(Box &clippingBox, std::string &boxSource)
 {
 	uint tilesZoom = 0;
 	bool tileBoundsSet = false;
@@ -506,8 +506,11 @@ bool OsmDiskTiles::GetAvailableTileExtent(Box &clippingBox)
 		xMin, xMax, yMin, yMax);
 
 	if(tileBoundsSet)
+	{
 		clippingBox = Box(geom::make<Point>(tilex2lon(xMin, tilesZoom), tiley2lat(yMax+1, tilesZoom)),
 		              geom::make<Point>(tilex2lon(xMax+1, tilesZoom), tiley2lat(yMin, tilesZoom)));
+		boxSource="tiles on disk (OsmDiskTiles)";
+	}
 
 	return tileBoundsSet;
 }

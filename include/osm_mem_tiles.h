@@ -31,7 +31,7 @@ public:
 
 	virtual uint GetBaseZoom();
 
-	virtual bool GetAvailableTileExtent(Box &clippingBox);
+	virtual bool GetAvailableTileExtent(Box &clippingBox, std::string &boxSource);
 
 private:
 	//This variables are generally safe for multiple threads to read, but not to write.
