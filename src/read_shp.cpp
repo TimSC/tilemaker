@@ -126,7 +126,7 @@ void prepareShapefile(const string &filename,
 
 void readShapeEntity(int i, SHPHandle shp, DBFHandle dbf, 
 	const unordered_map<int,string> &columnMap, const unordered_map<int,int> &columnTypeMap,
-	int indexField, const Box &clippingBox,
+	int indexField, bool clipBoxSet, const Box &clippingBox,
 	class ShapeFileResultsDecoder &outObj)
 {
 	SHPObject* shape = SHPReadObject(shp, i);
@@ -140,10 +140,10 @@ void readShapeEntity(int i, SHPHandle shp, DBFHandle dbf,
 
     // Check shape is in clippingBox
 	Box shapeBox(Point(shape->dfXMin, lat2latp(shape->dfYMin)), Point(shape->dfXMax, lat2latp(shape->dfYMax)));
-	if (shapeBox.min_corner().get<0>() > clippingBox.max_corner().get<0>() or 
+	if (clipBoxSet and (shapeBox.min_corner().get<0>() > clippingBox.max_corner().get<0>() or 
 		shapeBox.max_corner().get<0>() < clippingBox.min_corner().get<0>() or 
 		shapeBox.min_corner().get<1>() > clippingBox.max_corner().get<1>() or
-		shapeBox.max_corner().get<1>() < clippingBox.min_corner().get<1>())
+		shapeBox.max_corner().get<1>() < clippingBox.min_corner().get<1>()))
 	{
 		SHPDestroyObject(shape);
 		return;
@@ -154,7 +154,7 @@ void readShapeEntity(int i, SHPHandle shp, DBFHandle dbf,
 	if (shapeType==1) {
 		// Points
 		Point p( shape->padfX[0], lat2latp(shape->padfY[0]) );
-		if (geom::within(p, clippingBox)) {
+		if (!clipBoxSet or geom::within(p, clippingBox)) {
 
 			string name;
 			bool hasName = false;
@@ -175,7 +175,10 @@ void readShapeEntity(int i, SHPHandle shp, DBFHandle dbf,
 			fillPointArrayFromShapefile(&points, shape, j);
 			geom::assign_points(ls, points);
 			MultiLinestring out;
-			geom::intersection(ls, clippingBox, out);
+			if(clipBoxSet)
+				geom::intersection(ls, clippingBox, out);
+			else
+				out.push_back(ls);
 			for (MultiLinestring::const_iterator it = out.begin(); it != out.end(); ++it) {
 
 				string name;
@@ -240,7 +243,10 @@ void readShapeEntity(int i, SHPHandle shp, DBFHandle dbf,
 		}
 		// clip to bounding box
 		MultiPolygon out;
-		geom::intersection(multi, clippingBox, out);
+		if(clipBoxSet)
+			geom::intersection(multi, clippingBox, out);
+		else
+			out = multi;
 		if (boost::size(out)>0) {
 
 			string name;
@@ -301,14 +307,14 @@ void ShapefileReader::ReadAllInBox(const Box &clippingBox, class ShapeFileResult
 	for (int i=0; i<numEntities; i++) {
 		readShapeEntity(i, shp, dbf, 
 			columnMap, columnTypeMap,
-			indexField, clippingBox, outObj);
+			indexField, true, clippingBox, outObj);
 	}
 }
 
-void ShapefileReader::ReadIndexInBox(int index, const Box &clippingBox, class ShapeFileResultsDecoder &outObj)
+void ShapefileReader::ReadIndexInBox(int index, bool clipBoxSet, const Box &clippingBox, class ShapeFileResultsDecoder &outObj)
 {
 	readShapeEntity(index, shp, dbf, 
 		columnMap, columnTypeMap,
-		indexField, clippingBox, outObj);	
+		indexField, clipBoxSet, clippingBox, outObj);	
 }
 

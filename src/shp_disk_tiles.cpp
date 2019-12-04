@@ -67,17 +67,17 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 		else
 			sfr = itr->second;
 		mtx.unlock();
-		
-		//TODO avoid reading shapefile again!
-		//sfr->ReadAllInBox(projClippingBox, converter);
 
 		//Find relevant shape objects from spatial index
 		RTree &bi = this->bareTileIndex.indices[layer.name];
 		vector<std::pair<geom::model::box<Point>, unsigned int> > result;
-		bi.query(bgi::overlaps(projClippingBox), std::back_inserter(result));
+		bi.query(bgi::intersects(projClippingBox), std::back_inserter(result));
 
 		for(size_t i=0; i<result.size(); i++)
-			sfr->ReadIndexInBox(result[i].second, projClippingBox, converter);
+		{
+			cout << result[i].second << endl;
+			sfr->ReadIndexInBox(result[i].second, false, projClippingBox, converter);
+		}
 	}
 
 	tmpTileIndex.GetTileData(dstIndex, zoom, dstTile);

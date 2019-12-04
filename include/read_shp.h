@@ -50,7 +50,7 @@ public:
 	// produce call back events for all objects within the specified bounding box
 	void ReadAllInBox(const Box &clippingBox, class ShapeFileResultsDecoder &outObj);
 
-	void ReadIndexInBox(int index, const Box &clippingBox, class ShapeFileResultsDecoder &outObj);
+	void ReadIndexInBox(int index, bool clipBoxSet, const Box &clippingBox, class ShapeFileResultsDecoder &outObj);
 };
 
 #endif //_READ_SHP_H
