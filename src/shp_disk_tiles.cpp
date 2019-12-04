@@ -8,7 +8,6 @@ namespace bgi = geom::index;
 ShpDiskTiles::ShpDiskTiles(uint baseZoom, const class LayerDefinition &layers):
 	TileDataSource(),
 	layers(layers),
-	tileIndex(baseZoom),
 	bareTileIndex(baseZoom),
 	baseZoom(baseZoom)
 {
@@ -70,14 +69,11 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 
 		//Find relevant shape objects from spatial index
 		RTree &bi = this->bareTileIndex.indices[layer.name];
-		vector<std::pair<geom::model::box<Point>, unsigned int> > result;
+		vector<std::pair<Box, unsigned int> > result;
 		bi.query(bgi::intersects(projClippingBox), std::back_inserter(result));
 
 		for(size_t i=0; i<result.size(); i++)
-		{
-			cout << result[i].second << endl;
 			sfr->ReadIndexInBox(result[i].second, false, projClippingBox, converter);
-		}
 	}
 
 	tmpTileIndex.GetTileData(dstIndex, zoom, dstTile);
@@ -88,16 +84,21 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 vector<string> ShpDiskTiles::FindIntersecting(const string &layerName, Box &box) const 
 {
 	vector<IndexValue> candidates = this->bareTileIndex.findIntersectingGeometries(layerName, box);
-	vector<uint> ids = this->verifyIntersectResults(candidates, box.min_corner(), box.max_corner());
+	//No need to run verifyIntersectResults since RTree already returns final results
 
-	return this->bareTileIndex.namesOfGeometries(ids);
+	vector<unsigned int> candidateIndices;
+	for(size_t i=0; i<candidates.size(); i++)
+		candidateIndices.push_back(candidates[i].second);
+
+	return this->bareTileIndex.namesOfGeometries(candidateIndices);
 }
 
 bool ShpDiskTiles::Intersects(const string &layerName, Box &box) const 
 {
 	vector<IndexValue> candidates = this->bareTileIndex.findIntersectingGeometries(layerName, box);
-	vector<uint> v = this->verifyIntersectResults(candidates, box.min_corner(), box.max_corner());
-	return !v.empty();
+	//No need to run verifyIntersectResults since RTree already returns final results
+
+	return !candidates.empty();
 }
 
 uint ShpDiskTiles::GetBaseZoom()
@@ -122,7 +123,7 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 	{
 		const LayerDef &layer = layers.layers[layerNum];
 		if(layer.indexed)
-			this->tileIndex.CreateNamedLayerIndex(layer.name);
+			this->bareTileIndex.CreateNamedLayerIndex(layer.name);
 
 		if (layer.source.size()>0) {
 			if (!hasClippingBox) {
@@ -149,9 +150,6 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 		// External layer sources
 		const LayerDef &layer = layers.layers[layerNum];
 
-		if(layer.indexed)
-			this->bareTileIndex.CreateNamedLayerIndex(layer.name);
-
 		if (layer.source.size()>0) {
 			converterBareTileIndex.layerNum = layerNum;
 			const string &filename = layer.source;
@@ -167,33 +165,6 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 		}
 	}
 
-	cout << "Reading all shapes" << endl;
-
-	//TODO remove this up front loading of shapefile data
-	ShapeFileToTileIndexCached converter(this->tileIndex, layers);
-	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
-	{
-		// External layer sources
-		const LayerDef &layer = layers.layers[layerNum];
-
-		if (layer.source.size()>0) {
-			converter.layerNum = layerNum;
-			const string &filename = layer.source;
-			const vector<string> &columns = layer.sourceColumns;
-			const string &indexName = layer.indexName;
-
-			class ShapefileReader shapefileReader(filename,
-						  columns,
-			              indexName);
-			shapefileReader.ReadAllInBox(projClippingBox, converter);
-		}
-	}
-}
-
-std::vector<uint> ShpDiskTiles::verifyIntersectResults(std::vector<IndexValue> &results, Point &p1, Point &p2) const
-{
-	//TODO replace this tricky function
-	return this->tileIndex.verifyIntersectResults(results, p1, p2);
 }
 
 bool ShpDiskTiles::GetAvailableTileExtent(Box &clippingBox, std::string &boxSource)

@@ -31,11 +31,8 @@ public:
 
 private:
 
-	std::vector<uint> verifyIntersectResults(std::vector<IndexValue> &results, Point &p1, Point &p2) const;
-
 	//These must not be modified once processing has started. Multi-threading is used.
 	const class LayerDefinition &layers;
-	class TileIndexCached tileIndex;
 	class BareTileIndex bareTileIndex;
 	const uint baseZoom;
 	Box clippingBox;
