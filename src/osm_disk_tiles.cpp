@@ -98,7 +98,7 @@ void OsmDiskTilesZoomDir::GetAvailable(uint &tilesZoom,
 	yMax = this->yMax;
 }
 
-void OsmDiskTilesZoomDir::GetTile(uint zoom, int x, int y, class IDataStreamHandler *output)
+bool OsmDiskTilesZoomDir::GetTile(uint zoom, int x, int y, class IDataStreamHandler *output)
 {
 	if(zoom != this->tilesZoom)
 		throw runtime_error("Tiles can only be accessed at the zoom returned by GetAvailable");
@@ -109,11 +109,12 @@ void OsmDiskTilesZoomDir::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	inputFile /= to_string(this->tilesZoom);
 	inputFile /= to_string(x); 
 	inputFile /= to_string(y) + ".pbf";
-	//cout << inputFile << endl;
 
 	std::filebuf infi;
 	infi.open(inputFile.string(), std::ios::in | std::ios::binary);
+	if(!infi.is_open()) return false;
 	LoadFromPbf(infi, output);
+	return true;
 }
 
 // *****************************************
@@ -235,17 +236,18 @@ void OsmDiskTilesZoomTar::GetAvailable(uint &tilesZoom,
 	yMax = this->yMax;
 }
 
-void OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHandler *output)
+bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHandler *output)
 {
 	if(zoom != this->tilesZoom)
 		throw runtime_error("Tiles can only be accessed at the zoom returned by GetAvailable");
 
 	auto xit = tarEntries.find(x);
 	if(xit == tarEntries.end())
-		return; //Out of range in x
+		return false; //Out of range in x
 
 	m.lock();
 
+	//Open each gzip in the parent tar
 	auto colit = colTarDec.find(x);
 	if(colit == colTarDec.end())
 	{
@@ -257,6 +259,7 @@ void OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 		colit = colTarDec.find(x);
 	}
 
+	//Get file list for each (sub-)tar contained in parent tar
 	auto colit2 = colTarReaders.find(x);
 	if(colit2 == colTarReaders.end())
 	{
@@ -292,11 +295,15 @@ void OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 		colit2->second->ExtractByIndex(foundEntry, buff);
 	m.unlock();
 
-	if(foundEntry == -1) return;
+	if(foundEntry == -1)
+	{
+		return false;
+	}
 
 	//Decode the data in our own thread
 	buff.pubseekpos(0);
 	LoadFromO5m(buff, output);
+	return true;
 }
 
 // ********************************************
@@ -428,7 +435,7 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 			{
 				if(y < yMin or y > yMax) continue;
 
-				inTiles->GetTile(tilesZoom, x, y, &osmLuaProcessing);
+				bool found = inTiles->GetTile(tilesZoom, x, y, &osmLuaProcessing);
 			}
 		}
 
@@ -451,10 +458,10 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 	
 		osmLuaProcessing.readPreprocessing = true;
 		osmLuaProcessing.startOsmData();
-		inTiles->GetTile(tilesZoom, tilex, tiley, &osmLuaProcessing);
+		bool found = inTiles->GetTile(tilesZoom, tilex, tiley, &osmLuaProcessing);
 
 		osmLuaProcessing.readPreprocessing = false;
-		inTiles->GetTile(tilesZoom, tilex, tiley, &osmLuaProcessing);
+		found = inTiles->GetTile(tilesZoom, tilex, tiley, &osmLuaProcessing);
 	}
 
 	tmpTiles.tileIndex.GetTileData(dstIndex, zoom, dstTile);

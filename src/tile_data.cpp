@@ -451,9 +451,11 @@ void TileData::SetZoom(uint zoom, Box clippingBox)
 	tileCoordinates.clear();
 
 	int xMin = lon2tilex(clippingBox.min_corner().get<0>(), zoom);
-	int xMax = lon2tilex(clippingBox.max_corner().get<0>(), zoom)+1;
+	int xMax = lon2tilex(clippingBox.max_corner().get<0>(), zoom);
 	int yMin = lat2tiley(clippingBox.max_corner().get<1>(), zoom);
-	int yMax = lat2tiley(clippingBox.min_corner().get<1>(), zoom)-1;
+	int yMax = lat2tiley(clippingBox.min_corner().get<1>(), zoom);
+
+	cout << "generating tiles in range " << xMin << "," << xMax << "," << yMin << "," << yMax << endl;
 
 	for (int x=xMin; x<=xMax; x++)
 		for (int y=yMin; y<=yMax; y++)

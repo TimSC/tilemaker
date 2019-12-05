@@ -26,7 +26,7 @@ public:
 		int &xMin, int &xMax, int &yMin, int &yMax) {};
 
 	///This must be thread safe!
-	virtual void GetTile(uint zoom, int x, int y, class IDataStreamHandler *output) {};
+	virtual bool GetTile(uint zoom, int x, int y, class IDataStreamHandler *output) {return false;};
 };
 
 /**
@@ -49,7 +49,7 @@ public:
 		int &xMin, int &xMax, int &yMin, int &yMax);
 
 	///This must be thread safe!
-	virtual void GetTile(uint zoom, int x, int y, class IDataStreamHandler *output);
+	virtual bool GetTile(uint zoom, int x, int y, class IDataStreamHandler *output);
 };
 
 /**
@@ -80,7 +80,7 @@ public:
 		int &xMin, int &xMax, int &yMin, int &yMax);
 
 	///This must be thread safe!
-	virtual void GetTile(uint zoom, int x, int y, class IDataStreamHandler *output);
+	virtual bool GetTile(uint zoom, int x, int y, class IDataStreamHandler *output);
 };
 
 /**
