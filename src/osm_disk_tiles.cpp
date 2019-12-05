@@ -251,11 +251,17 @@ bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	auto colit = colTarDec.find(x);
 	if(colit == colTarDec.end())
 	{
+		std::shared_ptr<class SeekableTarEntry> entry = xit->second;
+		entry->pubseekpos(0);
+
 		//Need to decode this column tar
 		DecodeGzipIndex index;
-		CreateDecodeGzipIndex(*tarEntries[x].get(), index);
+		std::streamsize si = CreateDecodeGzipIndex(*entry.get(), index);
 
-		colTarDec[x] = make_shared<class DecodeGzipFastSeek>(*tarEntries[x].get(), index);
+		entry->pubseekpos(0);
+		std::shared_ptr<class DecodeGzipFastSeek> dec = make_shared<class DecodeGzipFastSeek>(*entry.get(), index);
+
+		colTarDec[x] = dec;
 		colit = colTarDec.find(x);
 	}
 
@@ -263,8 +269,11 @@ bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	auto colit2 = colTarReaders.find(x);
 	if(colit2 == colTarReaders.end())
 	{
+		std::shared_ptr<class DecodeGzipFastSeek> col = colit->second;
+		col->pubseekpos(0);
+
 		//Need to parse this column tar
-		colTarReaders[x] = make_shared<class SeekableTarRead>(*colit->second.get());
+		colTarReaders[x] = make_shared<class SeekableTarRead>(*col.get());
 		colTarReaders[x]->BuildIndex();
 		colit2 = colTarReaders.find(x);
 	}
