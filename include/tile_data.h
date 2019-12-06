@@ -116,6 +116,30 @@ private:
 	const class LayerDefinition &layers;
 };
 
+class ShapeFileObject : public ShapeFileResultsDecoder
+{
+public:
+	ShapeFileObject();
+	ShapeFileObject(const ShapeFileObject &obj);
+	virtual ~ShapeFileObject();
+
+	virtual void AddObject(int i, enum OutputGeometryType geomType,
+		Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals);
+
+	virtual void FoundColumn(const std::string &key, int typeVal) {};
+
+	virtual void CopyTo(class ShapeFileResultsDecoder &out);
+
+	//int layerNum;
+
+	int index;
+	enum OutputGeometryType geomType;
+	Geometry geometry;
+	bool hasName;
+	std::string name;
+	ShpFieldValueMap keyVals;
+};
+
 // ***********************************
 
 class TileDataSource

@@ -332,6 +332,45 @@ void ShapeFileToTileIndexCached::AddObject(int i, enum OutputGeometryType geomTy
 	this->out.AddObject(layer, this->layerNum, geomType, geometry, hasName, name, keyVals);
 }
 
+// *************************************
+
+ShapeFileObject::ShapeFileObject() : ShapeFileResultsDecoder()
+{
+	hasName = false;
+}
+
+ShapeFileObject::ShapeFileObject(const ShapeFileObject &obj) : ShapeFileResultsDecoder()
+{
+	this->index = obj.index;
+	this->geomType = obj.geomType;
+	this->geometry = obj.geometry;
+	this->hasName = obj.hasName,
+	this->name = obj.name;
+	this->keyVals = obj.keyVals;
+}
+
+ShapeFileObject::~ShapeFileObject()
+{
+
+}
+
+void ShapeFileObject::AddObject(int i, enum OutputGeometryType geomType,
+	Geometry geometry, bool hasName, const std::string &name, const ShpFieldValueMap &keyVals)
+{
+	this->index = i;
+	this->geomType = geomType;
+	this->geometry = geometry;
+	this->hasName = hasName,
+	this->name = name;
+	this->keyVals = keyVals;
+}
+
+void ShapeFileObject::CopyTo(class ShapeFileResultsDecoder &out)
+{
+	out.AddObject(index, geomType,
+		geometry, hasName, name, keyVals);
+}
+
 // *********************************
 
 ObjectsAtSubLayerIterator::ObjectsAtSubLayerIterator(OutputObjectsConstIt it, const class TileData &tileData):

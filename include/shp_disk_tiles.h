@@ -42,6 +42,7 @@ private:
 	std::mutex mtx;
 	///Each thread must have its own shapelib objects.
 	std::map<std::thread::id, std::map<int, std::shared_ptr<class ShapefileReader> > > shapefileReaderThreadMap;
+	std::map<unsigned int, class ShapeFileObject> shapeObjectCache;
 };
 
 #endif //_OSM_DISK_TILES

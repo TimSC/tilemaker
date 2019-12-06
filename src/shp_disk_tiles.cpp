@@ -38,6 +38,7 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 	}
 
 	ShapeFileToTileIndexCached converter(tmpTileIndex, layers);
+	class ShapeFileObject shpObject;
 	for(size_t layerNum=0; layerNum<layers.layers.size(); layerNum++)	
 	{
 		// External layer sources
@@ -73,7 +74,23 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 		bi.query(bgi::intersects(projClippingBox), std::back_inserter(result));
 
 		for(size_t i=0; i<result.size(); i++)
-			sfr->ReadIndexInBox(result[i].second, false, projClippingBox, converter);
+		{
+			//Check of shape object is cached
+			unsigned int shpIndex = result[i].second;
+			auto it = shapeObjectCache.find(shpIndex);
+			cout << "cache hit " << (it != shapeObjectCache.end()) << endl;
+			if(it != shapeObjectCache.end())
+			{
+				it->second.CopyTo(converter);
+				continue;
+			}
+
+			//Read shape object from file
+			sfr->ReadIndexInBox(shpIndex, false, projClippingBox, shpObject);
+
+			shapeObjectCache[shpIndex] = shpObject;
+			shpObject.CopyTo(converter);
+		}
 	}
 
 	tmpTileIndex.GetTileData(dstIndex, zoom, dstTile);
