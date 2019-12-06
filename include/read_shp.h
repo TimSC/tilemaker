@@ -47,6 +47,8 @@ public:
 					const std::string &indexName);
 	virtual ~ShapefileReader();	
 
+	void ReadAll(class ShapeFileResultsDecoder &outObj);
+
 	// produce call back events for all objects within the specified bounding box
 	void ReadAllInBox(const Box &clippingBox, class ShapeFileResultsDecoder &outObj);
 

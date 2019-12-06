@@ -302,6 +302,16 @@ ShapefileReader::~ShapefileReader()
 		DBFClose(dbf);
 }
 
+void ShapefileReader::ReadAll(class ShapeFileResultsDecoder &outObj) 
+{
+	Box nullBox;
+	for (int i=0; i<numEntities; i++) {
+		readShapeEntity(i, shp, dbf, 
+			columnMap, columnTypeMap,
+			indexField, false, nullBox, outObj);
+	}
+}
+
 void ShapefileReader::ReadAllInBox(const Box &clippingBox, class ShapeFileResultsDecoder &outObj) 
 {
 	for (int i=0; i<numEntities; i++) {

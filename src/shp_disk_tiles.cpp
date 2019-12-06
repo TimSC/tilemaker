@@ -157,12 +157,8 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 		if(layer.indexed)
 			this->bareTileIndex.CreateNamedLayerIndex(layer.name);
 
-		if (layer.source.size()>0) {
-			if (!hasClippingBox) {
-				cerr << "Can't read shapefiles unless a bounding box is provided." << endl;
-				exit(EXIT_FAILURE);
-			}
-			
+		if (layer.source.size()>0)
+		{			
 			const string &filename = layer.source;
 			const vector<string> &columns = layer.sourceColumns;
 			layerConverter.layerNum = layerNum;
@@ -193,7 +189,10 @@ void ShpDiskTiles::Load(class LayerDefinition &layers,
 					  columns,
 		              indexName);
 
-			sfr->ReadAllInBox(projClippingBox, converterBareTileIndex);
+			if(hasClippingBox)
+				sfr->ReadAllInBox(projClippingBox, converterBareTileIndex);
+			else
+				sfr->ReadAll(converterBareTileIndex);
 		}
 	}
 
