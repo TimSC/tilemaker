@@ -275,7 +275,6 @@ bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 		//Need to parse this column tar
 		colTarReaders[x] = make_shared<class SeekableTarRead>(*col.get());
 		colTarReaders[x]->BuildIndex();
-		cout << "col size " << x << "," << colTarReaders[x]->fileList.size() << endl;
 		colit2 = colTarReaders.find(x);
 	}
 	

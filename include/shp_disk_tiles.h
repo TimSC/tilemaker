@@ -5,6 +5,7 @@
 #include <thread>         // std::thread
 #include <mutex>          // std::mutex
 #include <memory>
+#include <deque>
 #include "tile_data.h"
 #include "shared_data.h"
 
@@ -43,6 +44,8 @@ private:
 	///Each thread must have its own shapelib objects.
 	std::map<std::thread::id, std::map<int, std::shared_ptr<class ShapefileReader> > > shapefileReaderThreadMap;
 	std::map<unsigned int, class ShapeFileObject> shapeObjectCache;
+	std::deque<unsigned int> shapeIdsInCache;
+	size_t maxCacheSize;
 };
 
 #endif //_OSM_DISK_TILES

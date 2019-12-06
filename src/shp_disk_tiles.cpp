@@ -12,6 +12,7 @@ ShpDiskTiles::ShpDiskTiles(uint baseZoom, const class LayerDefinition &layers):
 	baseZoom(baseZoom)
 {
 	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
+	maxCacheSize = 1000;
 }
 
 ShpDiskTiles::~ShpDiskTiles()
@@ -75,20 +76,34 @@ void ShpDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 
 		for(size_t i=0; i<result.size(); i++)
 		{
-			//Check of shape object is cached
 			unsigned int shpIndex = result[i].second;
+
+			//Check of shape object is cached
+			mtx.lock();
 			auto it = shapeObjectCache.find(shpIndex);
-			cout << "cache hit " << (it != shapeObjectCache.end()) << endl;
-			if(it != shapeObjectCache.end())
-			{
+			bool cacheHit = it != shapeObjectCache.end();
+			if(cacheHit)
 				it->second.CopyTo(converter);
+			mtx.unlock();
+			if(cacheHit)
 				continue;
-			}
 
 			//Read shape object from file
 			sfr->ReadIndexInBox(shpIndex, false, projClippingBox, shpObject);
 
+			//Store data in local cache
+			mtx.lock();
 			shapeObjectCache[shpIndex] = shpObject;
+			shapeIdsInCache.push_back(shpIndex);
+			while(shapeObjectCache.size() > maxCacheSize && shapeIdsInCache.size() > 0) //Limit cache size
+			{
+				auto it2 = shapeObjectCache.find(shapeIdsInCache[0]);
+				shapeIdsInCache.pop_front();
+				if(it2 != shapeObjectCache.end())
+					shapeObjectCache.erase(it2);
+			}
+			mtx.unlock();
+
 			shpObject.CopyTo(converter);
 		}
 	}
