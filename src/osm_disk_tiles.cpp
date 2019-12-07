@@ -125,6 +125,8 @@ OsmDiskTilesZoomTar::OsmDiskTilesZoomTar(std::string pth) : OsmDiskTilesZoom()
 	tilesZoom = 0;
 	tileBoundsSet = false;
 	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
+	indexFilesLargerThan = 20*1000*1000;
+	spanBetweenAccess = 20*1000*1000;
 
 	// Check for available zoom folders, choose the highest zoom
 	this->infi.open(tarPath, std::ios::in | std::ios::binary);
@@ -247,39 +249,10 @@ bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 
 	m.lock();
 
-	//Open each gzip in the parent tar
-	auto colit = colTarDec.find(x);
-	if(colit == colTarDec.end())
-	{
-		std::shared_ptr<class SeekableTarEntry> entry = xit->second;
-		entry->pubseekpos(0);
+	std::shared_ptr<class SeekableTarRead> col = this->PrepareColumnInternal(x);
 
-		//Need to decode this column tar
-		DecodeGzipIndex index;
-		std::streamsize si = CreateDecodeGzipIndex(*entry.get(), index);
-
-		entry->pubseekpos(0);
-		std::shared_ptr<class DecodeGzipFastSeek> dec = make_shared<class DecodeGzipFastSeek>(*entry.get(), index);
-
-		colTarDec[x] = dec;
-		colit = colTarDec.find(x);
-	}
-
-	//Get file list for each (sub-)tar contained in parent tar
-	auto colit2 = colTarReaders.find(x);
-	if(colit2 == colTarReaders.end())
-	{
-		std::shared_ptr<class DecodeGzipFastSeek> col = colit->second;
-		col->pubseekpos(0);
-
-		//Need to parse this column tar
-		colTarReaders[x] = make_shared<class SeekableTarRead>(*col.get());
-		colTarReaders[x]->BuildIndex();
-		colit2 = colTarReaders.find(x);
-	}
-	
 	//Search for matching tile in y
-	std::vector<tar_header> &colFileList = colit2->second->fileList;
+	std::vector<tar_header> &colFileList = col->fileList;
 	int foundEntry = -1;
 	for(size_t i=0; i<colFileList.size(); i++)
 	{
@@ -301,7 +274,7 @@ bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	//Extract the relevant data
 	std::stringbuf buff;
 	if(foundEntry != -1)
-		colit2->second->ExtractByIndex(foundEntry, buff);
+		col->ExtractByIndex(foundEntry, buff);
 	m.unlock();
 
 	if(foundEntry == -1)
@@ -313,6 +286,67 @@ bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	buff.pubseekpos(0);
 	LoadFromO5m(buff, output);
 	return true;
+}
+
+std::shared_ptr<class SeekableTarRead> OsmDiskTilesZoomTar::PrepareColumnInternal(int x)
+{
+	auto xit = tarEntries.find(x);
+	if(xit == tarEntries.end())
+	{
+		std::shared_ptr<class SeekableTarRead> empty;
+		return empty; //Out of range in x
+	}
+
+	//Open each gzip in the parent tar
+	auto colit = colTarDec.find(x);
+	if(colit == colTarDec.end())
+	{
+		std::shared_ptr<class SeekableTarEntry> entry = xit->second;
+		size_t tarSize = entry->pubseekoff(0, ios_base::end);
+		entry->pubseekpos(0);
+
+		std::shared_ptr<class DecodeGzip> dec;
+		if(tarSize > indexFilesLargerThan)
+		{
+			//Use fancy index for larger files
+			DecodeGzipIndex index;
+			std::streamsize si = CreateDecodeGzipIndex(*entry.get(), index, spanBetweenAccess);
+
+			entry->pubseekpos(0);
+			dec = make_shared<class DecodeGzipFastSeek>(*entry.get(), index);
+		}
+		else
+		{
+			dec = make_shared<class DecodeGzip>(*entry.get());
+		}
+
+		colTarDec[x] = dec;
+		colit = colTarDec.find(x);
+	}
+
+	//Get file list for each (sub-)tar contained in parent tar
+	auto colit2 = colTarReaders.find(x);
+	if(colit2 == colTarReaders.end())
+	{
+		std::shared_ptr<class DecodeGzip> col = colit->second;
+		col->pubseekpos(0);
+
+		//Need to parse this column tar
+		colTarReaders[x] = make_shared<class SeekableTarRead>(*col.get());
+		colTarReaders[x]->BuildIndex();
+		colit2 = colTarReaders.find(x);
+	}
+
+	return colit2->second;
+}
+
+std::shared_ptr<class SeekableTarRead> OsmDiskTilesZoomTar::PrepareColumn(int x)
+{
+	m.lock();
+	std::shared_ptr<class SeekableTarRead> col = this->PrepareColumnInternal(x);
+	m.unlock();
+
+	return col;
 }
 
 // ********************************************
@@ -395,6 +429,15 @@ OsmDiskTiles::OsmDiskTiles(const std::string &basePath,
 
 	cout << "disk tile extent x " << xMin << "," << xMax << endl;
 	cout << "y " << yMin << "," << yMax << endl;
+
+	if(false)
+	{
+		//Preload gzip indicies
+		for(int x=xMin; x<=xMax; x++)
+		{
+			inTiles->PrepareColumn(x);
+		}
+	}
 }
 
 void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom, 

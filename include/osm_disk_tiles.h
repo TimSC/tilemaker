@@ -27,6 +27,10 @@ public:
 
 	///This must be thread safe!
 	virtual bool GetTile(uint zoom, int x, int y, class IDataStreamHandler *output) {return false;};
+
+	///This must be thread safe!
+	virtual std::shared_ptr<class SeekableTarRead> PrepareColumn(int x) 
+	{std::shared_ptr<class SeekableTarRead> empty; return empty;};
 };
 
 /**
@@ -62,14 +66,17 @@ private:
 	uint tilesZoom;
 	bool tileBoundsSet;
 	int xMin, xMax, yMin, yMax;
+	size_t indexFilesLargerThan, spanBetweenAccess;
 
 	///This must be locked to access any of the variables in this section
 	std::mutex m;
 	std::filebuf infi;
 	std::shared_ptr<class SeekableTarRead> seekableTarRead;
 	std::map<int, std::shared_ptr<class SeekableTarEntry> > tarEntries;
-	std::map<int, std::shared_ptr<class DecodeGzipFastSeek> > colTarDec;
+	std::map<int, std::shared_ptr<class DecodeGzip> > colTarDec;
 	std::map<int, std::shared_ptr<class SeekableTarRead> > colTarReaders;
+
+	std::shared_ptr<class SeekableTarRead> PrepareColumnInternal(int x);
 
 public:
 	OsmDiskTilesZoomTar(std::string pth);
@@ -81,6 +88,9 @@ public:
 
 	///This must be thread safe!
 	virtual bool GetTile(uint zoom, int x, int y, class IDataStreamHandler *output);
+
+	///This must be thread safe!
+	virtual std::shared_ptr<class SeekableTarRead> PrepareColumn(int x);
 };
 
 /**
@@ -140,6 +150,7 @@ private:
 	const class TileDataSource &shpData;
 
 	std::shared_ptr <class OsmDiskTilesZoom> inTiles;
+
 };
 
 #endif //_OSM_DISK_TILES
