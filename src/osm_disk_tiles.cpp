@@ -125,8 +125,8 @@ OsmDiskTilesZoomTar::OsmDiskTilesZoomTar(std::string pth) : OsmDiskTilesZoom()
 	tilesZoom = 0;
 	tileBoundsSet = false;
 	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
-	indexFilesLargerThan = 20*1000*1000;
-	spanBetweenAccess = 20*1000*1000;
+	indexFilesLargerThan = 100*1024;
+	spanBetweenAccess = 1*1024*1024;
 
 	// Check for available zoom folders, choose the highest zoom
 	this->infi.open(tarPath, std::ios::in | std::ios::binary);
@@ -251,6 +251,8 @@ bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 
 	std::shared_ptr<class SeekableTarRead> col = this->PrepareColumnInternal(x);
 
+	this->LimitCache();
+
 	//Search for matching tile in y
 	std::vector<tar_header> &colFileList = col->fileList;
 	int foundEntry = -1;
@@ -336,7 +338,8 @@ std::shared_ptr<class SeekableTarRead> OsmDiskTilesZoomTar::PrepareColumnInterna
 		colTarReaders[x]->BuildIndex();
 		colit2 = colTarReaders.find(x);
 	}
-
+	
+	colTarIdCache.push_back(x);
 	return colit2->second;
 }
 
@@ -344,9 +347,29 @@ std::shared_ptr<class SeekableTarRead> OsmDiskTilesZoomTar::PrepareColumn(int x)
 {
 	m.lock();
 	std::shared_ptr<class SeekableTarRead> col = this->PrepareColumnInternal(x);
+
+	this->LimitCache();
 	m.unlock();
 
 	return col;
+}
+
+void OsmDiskTilesZoomTar::LimitCache()
+{
+	//Ensure we don't have too many gzips, etc.
+	while(colTarDec.size() > 100 and colTarIdCache.size() > 0)
+	{
+		int idToRemove = colTarIdCache[0];
+		colTarIdCache.pop_front();
+
+		auto it = colTarReaders.find(idToRemove);
+		if(it != colTarReaders.end())
+			colTarReaders.erase(it);
+
+		auto it2 = colTarDec.find(idToRemove);
+		if(it2 != colTarDec.end())
+			colTarDec.erase(it2);
+	}
 }
 
 // ********************************************

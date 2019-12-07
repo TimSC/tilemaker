@@ -75,8 +75,10 @@ private:
 	std::map<int, std::shared_ptr<class SeekableTarEntry> > tarEntries;
 	std::map<int, std::shared_ptr<class DecodeGzip> > colTarDec;
 	std::map<int, std::shared_ptr<class SeekableTarRead> > colTarReaders;
+	std::deque<int> colTarIdCache;
 
 	std::shared_ptr<class SeekableTarRead> PrepareColumnInternal(int x);
+	void LimitCache();
 
 public:
 	OsmDiskTilesZoomTar(std::string pth);
