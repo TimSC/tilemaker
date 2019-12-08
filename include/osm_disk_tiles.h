@@ -66,7 +66,7 @@ private:
 	uint tilesZoom;
 	bool tileBoundsSet;
 	int xMin, xMax, yMin, yMax;
-	size_t indexFilesLargerThan, spanBetweenAccess;
+	size_t indexFilesLargerThan, spanBetweenAccess, maxGzipObjs;
 
 	///This must be locked to access any of the variables in this section
 	std::mutex m;

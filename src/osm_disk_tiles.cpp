@@ -127,6 +127,7 @@ OsmDiskTilesZoomTar::OsmDiskTilesZoomTar(std::string pth) : OsmDiskTilesZoom()
 	xMin = 0; xMax = 0; yMin = 0; yMax = 0;
 	indexFilesLargerThan = 100*1024;
 	spanBetweenAccess = 1*1024*1024;
+	maxGzipObjs = 100;
 
 	// Check for available zoom folders, choose the highest zoom
 	this->infi.open(tarPath, std::ios::in | std::ios::binary);
@@ -251,8 +252,6 @@ bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 
 	std::shared_ptr<class SeekableTarRead> col = this->PrepareColumnInternal(x);
 
-	this->LimitCache();
-
 	//Search for matching tile in y
 	std::vector<tar_header> &colFileList = col->fileList;
 	int foundEntry = -1;
@@ -275,8 +274,14 @@ bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	
 	//Extract the relevant data
 	std::stringbuf buff;
+	int tarRet = 0;
 	if(foundEntry != -1)
-		col->ExtractByIndex(foundEntry, buff);
+		tarRet = col->ExtractByIndex(foundEntry, buff);
+	col.reset();
+
+	//This can invalidate the above pointers as resources are released!
+	this->LimitCache();
+
 	m.unlock();
 
 	if(foundEntry == -1)
@@ -285,7 +290,7 @@ bool OsmDiskTilesZoomTar::GetTile(uint zoom, int x, int y, class IDataStreamHand
 	}
 
 	//Decode the data in our own thread
-	buff.pubseekpos(0);
+	buff.pubseekpos(0);	
 	LoadFromO5m(buff, output);
 	return true;
 }
@@ -357,7 +362,7 @@ std::shared_ptr<class SeekableTarRead> OsmDiskTilesZoomTar::PrepareColumn(int x)
 void OsmDiskTilesZoomTar::LimitCache()
 {
 	//Ensure we don't have too many gzips, etc.
-	while(colTarDec.size() > 100 and colTarIdCache.size() > 0)
+	while(colTarDec.size() > maxGzipObjs and colTarIdCache.size() > 0)
 	{
 		int idToRemove = colTarIdCache[0];
 		colTarIdCache.pop_front();
