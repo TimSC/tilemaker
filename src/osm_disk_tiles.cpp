@@ -457,15 +457,6 @@ OsmDiskTiles::OsmDiskTiles(const std::string &basePath,
 
 	cout << "disk tile extent x " << xMin << "," << xMax << endl;
 	cout << "y " << yMin << "," << yMax << endl;
-
-	if(false)
-	{
-		//Preload gzip indicies
-		for(int x=xMin; x<=xMax; x++)
-		{
-			inTiles->PrepareColumn(x);
-		}
-	}
 }
 
 void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom, 
@@ -488,10 +479,12 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 
 	if(zoom < tilesZoom)
 	{
+		//Extract data from multiple tiles
 		int scale = pow(2, tilesZoom-zoom);
 		TileCoordinates srcIndex1(dstIndex.x*scale, dstIndex.y*scale);
 		TileCoordinates srcIndex2((dstIndex.x+1)*scale, (dstIndex.y+1)*scale);
 
+		DeduplicateOsm osmLuaProcessingDudup(osmLuaProcessing);
 		osmLuaProcessing.readPreprocessing = true;
 		osmLuaProcessing.startOsmData();
 		for(int x=srcIndex1.x; x<srcIndex2.x; x++)
@@ -502,9 +495,10 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 			{
 				if(y < yMin or y > yMax) continue;
 
-				inTiles->GetTile(tilesZoom, x, y, &osmLuaProcessing);
+				inTiles->GetTile(tilesZoom, x, y, &osmLuaProcessingDudup);
 			}
 		}
+		osmLuaProcessingDudup.ResetExisting();
 
 		osmLuaProcessing.readPreprocessing = false;
 		for(int x=srcIndex1.x; x<srcIndex2.x; x++)
@@ -515,14 +509,14 @@ void OsmDiskTiles::GetTileData(TileCoordinates dstIndex, uint zoom,
 			{
 				if(y < yMin or y > yMax) continue;
 
-				bool found = inTiles->GetTile(tilesZoom, x, y, &osmLuaProcessing);
+				bool found = inTiles->GetTile(tilesZoom, x, y, &osmLuaProcessingDudup);
 			}
 		}
 
 	}
 	else
 	{
-		//Convert request tile coordinates into the source tile used for input
+		//Convert request tile coordinates into the single source tile used for input
 		TileCoordinate tilex = dstIndex.x;
 		TileCoordinate tiley = dstIndex.y;
 		if(zoom > tilesZoom)
