@@ -2,7 +2,7 @@ LUA_CFLAGS := -I/usr/local/include/lua5.1 -I/usr/include/lua5.1
 LUA_LIBS := -llua5.1
 CXXFLAGS := -O3 -Wall -Wno-unknown-pragmas -Wno-sign-compare -std=c++11 -pthread $(CONFIG)
 LIB := -L/usr/local/lib -lz $(LUA_LIBS) -lboost_program_options -lsqlite3 -lboost_filesystem -lboost_system -lprotobuf -lshp -lexpat -lboost_iostreams -lbsd
-INC := -I/usr/local/include -isystem ./include -I./src $(LUA_CFLAGS)
+INC := -I./include -I./cppo5m/pbf -I/usr/local/include -isystem $(LUA_CFLAGS)
 
 all: tilemaker
 
@@ -10,13 +10,13 @@ tilemaker: include/vector_tile.pb.o cppo5m/pbf/fileformat.pb.o cppo5m/pbf/osmfor
 	$(CXX) $(CXXFLAGS) -o tilemaker $^ $(INC) $(LIB)
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -o $@ -c $< $(INC)
+	$(CXX) $(CXXFLAGS) $(INC) -o $@ -c $<
 
 %.o: %.cc
-	$(CXX) $(CXXFLAGS) -o $@ -c $< $(INC)
+	$(CXX) $(CXXFLAGS) $(INC) -o $@ -c $<
 
 %.co: %.c
-	$(CXX) $(CXXFLAGS) -o $@ -c $< $(INC)
+	$(CXX) $(CXXFLAGS) $(INC) -o $@ -c $< 
 
 cppo5m/pbf/%.pb.cc: cppo5m/proto/%.proto
 	protoc -I=cppo5m/proto $< --cpp_out=cppo5m/pbf
@@ -25,7 +25,7 @@ cppo5m/pbf/%.pb.cc: cppo5m/proto/%.proto
 	protoc --proto_path=include --cpp_out=include $<
 
 %.pb.o: %.pb.cc
-	$(CXX) $(CXXFLAGS) -o $@ -c $< $(INC)
+	$(CXX) $(CXXFLAGS) $(INC) -o $@ -c $< 
 
 install:
 	install -m 0755 tilemaker /usr/local/bin
