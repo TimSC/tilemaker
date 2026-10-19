@@ -49,6 +49,11 @@ class LeasedStore {
 
 public:
 	~LeasedStore() {
+		release();
+	}
+
+	// Hands the leases back
+	void release() {
 		for (const auto& lease : leases) {
 			auto source = lease.first;
 			std::lock_guard<std::mutex> lock(source->storeMutex);
@@ -56,6 +61,7 @@ public:
 			std::vector<std::pair<size_t, T*>>& availableLeases = getAvailableLeases<T>(source);
 			availableLeases.push_back(lease.second);
 		}
+		leases.clear();
 	}
 
 	std::pair<size_t, T*> get(TileDataSource* source) {

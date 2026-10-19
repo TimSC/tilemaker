@@ -33,6 +33,7 @@ struct RenderSettings {
     string process;
     string dbConnection;
     string tablePrefix;
+    string modifyPrefix;
     int timeoutSeconds;
 };
 
@@ -81,7 +82,7 @@ static bool renderTile(const RenderSettings &settings, unsigned zoom, unsigned x
 
     vector<string> args = {settings.tilemaker,
         settings.dbConnection.empty() ? string("--db") : "--db=" + settings.dbConnection,
-        "--table-prefix", settings.tablePrefix,
+        "--table-prefix", settings.tablePrefix, "--modify-prefix", settings.modifyPrefix,
         "--tile", to_string(zoom) + "/" + to_string(x) + "/" + to_string(y),
         "--output", (dir / "tiles").string(),
         "--config", settings.config, "--process", settings.process,
@@ -172,7 +173,8 @@ int main(int argc, char* argv[]) {
     renderOptions.add_options()
         ("bbox", po::value< string >(&bbox), "area the map shows when it opens, as minlon,minlat,maxlon,maxlat")
         ("db", po::value< string >(&settings.dbConnection)->default_value(""), "libpq connection string; by default the PG* environment variables are used")
-        ("table-prefix", po::value< string >(&settings.tablePrefix)->default_value("pycrocosm_mod_"), "map database table set to read")
+        ("table-prefix", po::value< string >(&settings.tablePrefix)->default_value("planet_static_"), "map database static tables (pgmap's dbtableprefix)")
+        ("modify-prefix", po::value< string >(&settings.modifyPrefix)->default_value("pycrocosm_mod_"), "map database modify tables (pgmap's dbtablemodifyprefix)")
         ("config", po::value< string >(&settings.config)->default_value("config.json"), "tilemaker config JSON file")
         ("process", po::value< string >(&settings.process)->default_value("process.lua"), "tilemaker tag-processing Lua file")
         ("tilemaker", po::value< string >(&settings.tilemaker)->default_value(defaultTilemaker), "tilemaker program")

@@ -63,9 +63,12 @@ struct OsmArea {
 void ReadOsmFile(const std::string& filename, OsmArea& area);
 
 // Adds what the pycrocosm map database has within the bounds (in degrees) to
-// area, from the table set tablePrefix. conninfo is a libpq connection string;
-// empty uses the PG* environment variables. Throws std::runtime_error on failure.
-void ReadOsmDatabase(const std::string& conninfo, const std::string& tablePrefix,
+// area: the static layer of tables (staticPrefix, pgmap's dbtableprefix) with
+// the modify layer over it (modifyPrefix, dbtablemodifyprefix). With an empty
+// staticPrefix, the modify layer's views alone are read. conninfo is a libpq
+// connection string; empty uses the PG* environment variables. Throws
+// std::runtime_error on failure.
+void ReadOsmDatabase(const std::string& conninfo, const std::string& staticPrefix, const std::string& modifyPrefix,
 	double minLon, double minLat, double maxLon, double maxLat, OsmArea& area);
 
 #endif //_OSM_AREA_H

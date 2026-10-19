@@ -18,7 +18,8 @@
 #   docker compose run --rm --service-ports server --input /data/area.mbtiles --static /usr/src/app/static --port 8081
 #
 # The image's own config.json and process.lua are used unless you pass
-# --config and --process, such as files in ./data.
+# --config and --process, such as files in ./data. Their shapefile layers are
+# read from ./coastline and ./landcover (get-coastline.sh, get-landcover.sh).
 #
 # Map database: --db with no connection string uses the PG* variables below,
 # taken from your shell or a .env file beside this one. host.docker.internal is
@@ -51,14 +52,19 @@ services:
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - ./data:/data
+      - ./coastline:/usr/src/app/coastline:ro
+      - ./landcover:/usr/src/app/landcover:ro
 
   server:
     <<: [*image, *database]
     entrypoint: ["/usr/src/app/tilemaker-server"]
     command: ["--render", "--bbox", "${TILEMAKER_BBOX:--1.095,50.795,-1.085,50.8}",
-              "--table-prefix", "${TABLE_PREFIX:-pycrocosm_mod_}",
+              "--table-prefix", "${TABLE_PREFIX:-planet_static_}",
+              "--modify-prefix", "${MODIFY_PREFIX:-pycrocosm_mod_}",
               "--static", "/usr/src/app/static", "--port", "8081"]
     volumes:
       - ./data:/data:ro
+      - ./coastline:/usr/src/app/coastline:ro
+      - ./landcover:/usr/src/app/landcover:ro
     ports:
       - "${TILEMAKER_PORT:-8081}:8081"

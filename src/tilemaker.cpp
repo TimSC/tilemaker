@@ -165,7 +165,7 @@ int main(const int argc, const char* argv[]) {
 		vector<string> box = parseBox(options.bbox);
 		cout << "Reading the map database" << endl;
 		try {
-			ReadOsmDatabase(options.dbConnection, options.tablePrefix,
+			ReadOsmDatabase(options.dbConnection, options.tablePrefix, options.modifyPrefix,
 				bboxElementFromStr(box.at(0)), bboxElementFromStr(box.at(1)),
 				bboxElementFromStr(box.at(2)), bboxElementFromStr(box.at(3)), osmArea);
 		} catch (const std::exception& e) {
@@ -315,6 +315,11 @@ int main(const int argc, const char* argv[]) {
 	// ----	Run the OSM data through the Lua profile
 
 	ProcessOsmArea(osmArea, osmStore, osmLuaProcessing, significantNodeTags, significantWayTags);
+	// This thread leased geometry stores while processing (see leased_store.h).
+	// Upstream read on threads that ended before main returned; here they are
+	// handed back now, while osmMemTiles still exists, not when the thread
+	// exits after it is gone.
+	releaseThreadStoreLeases();
 	osmArea = OsmArea(); // no longer needed
 	osmStore.reportSize();
 	std::vector<bool> sortOrders = layers.getSortOrders();

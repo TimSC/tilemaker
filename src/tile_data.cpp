@@ -44,6 +44,13 @@ thread_local LeasedStore<TileDataSource::linestring_store_t> linestringStore;
 thread_local LeasedStore<TileDataSource::multi_linestring_store_t> multilinestringStore;
 thread_local LeasedStore<TileDataSource::multi_polygon_store_t> multipolygonStore;
 
+void releaseThreadStoreLeases() {
+	pointStore.release();
+	linestringStore.release();
+	multilinestringStore.release();
+	multipolygonStore.release();
+}
+
 TileDataSource::TileDataSource(size_t threadNum, unsigned int indexZoom, bool includeID)
 	:
 	includeID(includeID),

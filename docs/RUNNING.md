@@ -53,9 +53,13 @@ connection string, such as `--db "host=localhost dbname=map user=renderer"`. Kee
 in `PGPASSWORD` or `~/.pgpass` rather than on the command line. A role that can only read is
 enough: everything is read in one read-only transaction.
 
-`--table-prefix` names the table set to read, by default `pycrocosm_mod_` (pgmap's
-`dbtablemodifyprefix`). Its views show the edits over the imported planet, so this is the
-current map.
+Like pgmap, tilemaker reads two layers of tables: the static layer, the imported planet, named
+by `--table-prefix` (pgmap's `dbtableprefix`, by default `planet_static_`), and the modify layer
+of edits over it, named by `--modify-prefix` (`dbtablemodifyprefix`, by default
+`pycrocosm_mod_`). An object the modify layer has taken over, whether edited or deleted, is
+read from it; anything else from the static layer. Together they are the current map. With an
+empty `--table-prefix`, the modify layer's `visible*` views are read alone; they include
+whatever static layer pgmap made them with.
 
 The map must store way and relation bounding boxes, which is how the ways and relations
 reaching into the area are found. Map schema versions 15 and 16 are supported; anything else
@@ -97,7 +101,7 @@ tilemaker with `--tile` (the program beside it, unless `--tilemaker` says otherw
                      --process ../resources/process-openmaptiles.lua
 
 `--bbox` is where the map opens. The database is given as for tilemaker (`--db`, or the `PG*`
-environment variables, and `--table-prefix`). `--threads` tiles are rendered at once (4 by
+environment variables, `--table-prefix` and `--modify-prefix`). `--threads` tiles are rendered at once (4 by
 default), each allowed `--timeout` seconds (60). Tiles below z11 are empty. Each tile is
 rendered afresh, so the map shows edits as soon as they are made; the config, Lua and any
 shapefiles are loaded again for each tile, so keep large shapefiles out of the config.

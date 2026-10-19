@@ -407,6 +407,11 @@ public:
 	}
 };
 
+// Hands back the geometry stores this thread has leased (see leased_store.h).
+// A thread that stored geometries must do this before the TileDataSources it
+// stored them in are destroyed, if it outlives them.
+void releaseThreadStoreLeases();
+
 void populateTilesAtZoom(
 	const std::vector<class TileDataSource *>& sources,
 	std::vector<std::shared_ptr<TileCoordinatesSet>>& zooms

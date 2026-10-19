@@ -56,8 +56,9 @@ Then look at the map at http://localhost:8081/:
     docker compose up server
 
 The server renders each tile from the map database as the map asks for it, running tilemaker in
-the same container. `TILEMAKER_BBOX` is where the map opens, `TABLE_PREFIX` the table set to
-read, and `TILEMAKER_PORT` the port. To serve tiles rendered earlier instead:
+the same container. `TILEMAKER_BBOX` is where the map opens, `TABLE_PREFIX` and `MODIFY_PREFIX`
+the static and modify tables to read (as pgmap's `dbtableprefix` and `dbtablemodifyprefix`), and
+`TILEMAKER_PORT` the port. To serve tiles rendered earlier instead:
 
     docker compose run --rm --service-ports server --input /data/area.mbtiles --static /usr/src/app/static --port 8081
 

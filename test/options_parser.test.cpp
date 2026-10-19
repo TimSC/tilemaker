@@ -71,17 +71,19 @@ MU_TEST(test_options_parser) {
 		auto opts = parse(args);
 		mu_check(opts.useDatabase);
 		mu_check(opts.dbConnection.empty());
-		mu_check(opts.tablePrefix == "pycrocosm_mod_");
+		mu_check(opts.tablePrefix == "planet_static_");
+		mu_check(opts.modifyPrefix == "pycrocosm_mod_");
 		mu_check(opts.inputFiles.empty());
 	}
 
 	// The map database, with a connection string and table set
 	{
-		std::vector<std::string> args = {"--output", "foo.mbtiles", "--db=dbname=map", "--table-prefix", "other_", "--bbox", "-1.1,50.79,-1.08,50.8"};
+		std::vector<std::string> args = {"--output", "foo.mbtiles", "--db=dbname=map", "--table-prefix", "static_", "--modify-prefix", "mod_", "--bbox", "-1.1,50.79,-1.08,50.8"};
 		auto opts = parse(args);
 		mu_check(opts.useDatabase);
 		mu_check(opts.dbConnection == "dbname=map");
-		mu_check(opts.tablePrefix == "other_");
+		mu_check(opts.tablePrefix == "static_");
+		mu_check(opts.modifyPrefix == "mod_");
 	}
 
 	ASSERT_THROWS("--db needs a --bbox", "--output", "foo.mbtiles", "--db");

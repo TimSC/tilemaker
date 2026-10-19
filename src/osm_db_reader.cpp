@@ -1,13 +1,15 @@
-// Reads an area of a pycrocosm map database, through the views pgmap defines
-// for each table set: <prefix>visiblenodes, visibleways and visiblerelations,
-// and if the shape cache is on, visible_way_shapes and visible_relation_shapes.
-// They show the table set's objects together with its parent's (the edits over
-// the imported planet), so nothing here needs to know how those are kept.
+// Reads an area of a pycrocosm map database. Like pgmap, it reads two layers
+// of tables: the static layer (the imported planet, pgmap's dbtableprefix) and
+// the modify layer over it (the edits since, dbtablemodifyprefix). An object
+// is the modify layer's if it has taken the object over (its ID is in the
+// layer's nodeids, wayids or relationids, whether edited or deleted), and
+// otherwise the static layer's. This is what pgmap's <prefix>visible* views
+// show, but here either prefix can be chosen.
 //
 // Ways and relations are found by their bounding boxes, which the map must
-// store. Their shapes come from the shape cache when it has them; otherwise
-// they are built from their nodes, which are fetched by ID where they lie
-// outside the area.
+// store. Their shapes come from the shape cache (way_shapes and
+// relation_shapes) when it is on and has them; otherwise they are built from
+// their nodes, which are fetched by ID where they lie outside the area.
 #include <chrono>
 #include <iostream>
 #include <memory>
@@ -129,35 +131,85 @@ vector<OsmAreaMember> parseRelationMembers(const char* membersText, const char* 
 	return members;
 }
 
+// The objects of each kind the map shows, from one or two layers
+class Layers {
+public:
+	Layers(Database& db, const string& staticPrefix, const string& modifyPrefix):
+		db(db), staticPrefix(staticPrefix), modifyPrefix(modifyPrefix) {}
+
+	// Refuses tables this reader doesn't understand. Returns whether the shape
+	// cache is on.
+	bool check() {
+		vector<string> prefixes = {modifyPrefix};
+		if (!staticPrefix.empty()) prefixes.push_back(staticPrefix);
+		for (const string& prefix : prefixes) {
+			string meta = db.quoteName(prefix + "meta");
+			Result r = db.exec("SELECT to_regclass($1) IS NOT NULL", {meta});
+			if (string(PQgetvalue(r.get(), 0, 0)) != "t")
+				throw runtime_error("No map tables with the prefix " + prefix);
+			r = db.exec("SELECT value FROM " + meta + " WHERE key = 'schema_version'");
+			int version = PQntuples(r.get()) ? stoi(PQgetvalue(r.get(), 0, 0)) : 0;
+			if (!SUPPORTED_SCHEMA_VERSIONS.count(version))
+				throw runtime_error("Map schema version " + to_string(version) + " (" + prefix + ") is not supported");
+		}
+
+		for (const string& table : {own("way"), own("relation")}) {
+			Result r = db.exec("SELECT count(*) FROM pg_attribute WHERE attrelid = to_regclass($1) AND attname = 'bbox' AND NOT attisdropped", {table});
+			if (string(PQgetvalue(r.get(), 0, 0)) == "0")
+				throw runtime_error("The map does not store way and relation bounding boxes, which reading from it needs");
+		}
+
+		bool shapes = true;
+		for (const char* kind : {"way", "relation"}) {
+			Result r = db.exec("SELECT to_regclass($1) IS NOT NULL AND to_regclass($2) IS NOT NULL",
+				{ownShapes(kind), parentShapes(kind)});
+			shapes = shapes && string(PQgetvalue(r.get(), 0, 0)) == "t";
+		}
+		return shapes;
+	}
+
+	// SELECT columns of the objects of a kind ("node", "way" or "relation")
+	// that match where, which may use the parameters $1 and so on
+	string objects(const string& kind, const string& columns, const string& where) {
+		return select(columns, own(kind), parent(kind), kind, where);
+	}
+
+	// SELECT columns of the cached shapes of a kind ("way" or "relation")
+	string shapes(const string& kind, const string& columns, const string& where) {
+		return select(columns, ownShapes(kind), parentShapes(kind), kind, where);
+	}
+
+private:
+	// The modify layer's own objects, and what it shows of the static layer's.
+	// With no static prefix, the modify layer's views show everything.
+	string own(const string& kind) {
+		return db.quoteName(modifyPrefix + (staticPrefix.empty() ? "visible" : "live") + kind + "s");
+	}
+	string parent(const string& kind) { return db.quoteName(staticPrefix + "visible" + kind + "s"); }
+	string ownShapes(const string& kind) {
+		return db.quoteName(modifyPrefix + (staticPrefix.empty() ? "visible_" : "") + kind + "_shapes");
+	}
+	string parentShapes(const string& kind) {
+		return db.quoteName((staticPrefix.empty() ? modifyPrefix : staticPrefix) + "visible_" + kind + "_shapes");
+	}
+
+	string select(const string& columns, const string& ownTable, const string& parentTable,
+	              const string& kind, const string& where) {
+		if (staticPrefix.empty())
+			return "SELECT " + columns + " FROM " + ownTable + " WHERE " + where;
+		string ids = db.quoteName(modifyPrefix + kind + "ids");
+		return "SELECT " + columns + " FROM " + parentTable + " p WHERE (" + where + ") AND NOT EXISTS "
+			"(SELECT 1 FROM " + ids + " x WHERE x.id = p.id) "
+			"UNION ALL SELECT " + columns + " FROM " + ownTable + " WHERE " + where;
+	}
+
+	Database& db;
+	string staticPrefix, modifyPrefix;
+};
+
 class AreaReader {
 public:
-	AreaReader(Database& db, const string& prefix): db(db) {
-		meta = db.quoteName(prefix + "meta");
-		nodes = db.quoteName(prefix + "visiblenodes");
-		ways = db.quoteName(prefix + "visibleways");
-		relations = db.quoteName(prefix + "visiblerelations");
-		wayShapes = db.quoteName(prefix + "visible_way_shapes");
-		relationShapes = db.quoteName(prefix + "visible_relation_shapes");
-	}
-
-	// Refuses a table set this reader doesn't understand. Returns whether the
-	// shape cache is on.
-	bool check(const string& prefix) {
-		Result r = db.exec("SELECT to_regclass($1) IS NOT NULL", {meta});
-		if (string(PQgetvalue(r.get(), 0, 0)) != "t")
-			throw runtime_error("No map table set with the prefix " + prefix);
-		r = db.exec("SELECT value FROM " + meta + " WHERE key = 'schema_version'");
-		int version = PQntuples(r.get()) ? stoi(PQgetvalue(r.get(), 0, 0)) : 0;
-		if (!SUPPORTED_SCHEMA_VERSIONS.count(version))
-			throw runtime_error("Map schema version " + to_string(version) + " is not supported");
-
-		r = db.exec("SELECT count(*) FROM pg_attribute WHERE attrelid = to_regclass($1) AND attname = 'bbox' AND NOT attisdropped", {ways});
-		if (string(PQgetvalue(r.get(), 0, 0)) == "0")
-			throw runtime_error("The map does not store way and relation bounding boxes, which reading from it needs");
-
-		r = db.exec("SELECT to_regclass($1) IS NOT NULL AND to_regclass($2) IS NOT NULL", {wayShapes, relationShapes});
-		return string(PQgetvalue(r.get(), 0, 0)) == "t";
-	}
+	AreaReader(Database& db, Layers& layers): db(db), layers(layers) {}
 
 	void read(const vector<string>& box, bool useShapes, OsmArea& area) {
 		const string envelope = "ST_MakeEnvelope($1::float8, $2::float8, $3::float8, $4::float8, 4326)";
@@ -207,7 +259,7 @@ private:
 	}
 
 	void readNodes(const string& where, const vector<string>& params, OsmArea& area) {
-		Result r = db.exec("SELECT id, ST_Y(geom), ST_X(geom), tags::text FROM " + nodes + " WHERE " + where, params);
+		Result r = db.exec(layers.objects("node", "id, ST_Y(geom), ST_X(geom), tags::text", where), params);
 		for (int i = 0; i < PQntuples(r.get()); i++) {
 			int64_t id = toInt64(PQgetvalue(r.get(), i, 0));
 			nodeIds.insert(id);
@@ -217,7 +269,7 @@ private:
 	}
 
 	void readWays(const string& where, const vector<string>& params, OsmArea& area) {
-		Result r = db.exec("SELECT id, tags::text, members::text FROM " + ways + " WHERE " + where, params);
+		Result r = db.exec(layers.objects("way", "id, tags::text, members::text", where), params);
 		for (int i = 0; i < PQntuples(r.get()); i++) {
 			int64_t id = toInt64(PQgetvalue(r.get(), i, 0));
 			wayIds.insert(id);
@@ -226,7 +278,7 @@ private:
 	}
 
 	void readRelations(const string& where, const vector<string>& params, OsmArea& area) {
-		Result r = db.exec("SELECT id, tags::text, members::text, memberroles::text FROM " + relations + " WHERE " + where, params);
+		Result r = db.exec(layers.objects("relation", "id, tags::text, members::text, memberroles::text", where), params);
 		for (int i = 0; i < PQntuples(r.get()); i++) {
 			area.relations.push_back({toInt64(PQgetvalue(r.get(), i, 0)),
 				parseRelationMembers(PQgetvalue(r.get(), i, 2), PQgetvalue(r.get(), i, 3)),
@@ -238,8 +290,8 @@ private:
 		vector<int64_t> ids;
 		for (const OsmAreaWay& way : area.ways) ids.push_back(way.id);
 		if (ids.empty()) return;
-		Result r = db.exec("SELECT id, ST_AsText(shape) FROM " + wayShapes +
-			" WHERE id = ANY($1::bigint[]) AND shape IS NOT NULL", {idArray(ids)});
+		Result r = db.exec(layers.shapes("way", "id, ST_AsText(shape)",
+			"id = ANY($1::bigint[]) AND shape IS NOT NULL"), {idArray(ids)});
 		unordered_map<int64_t, string> shapes;
 		for (int i = 0; i < PQntuples(r.get()); i++)
 			shapes[toInt64(PQgetvalue(r.get(), i, 0))] = PQgetvalue(r.get(), i, 1);
@@ -255,9 +307,9 @@ private:
 		vector<int64_t> ids;
 		for (const OsmAreaRelation& relation : area.relations) ids.push_back(relation.id);
 		if (ids.empty()) return;
-		Result r = db.exec("SELECT id, CASE WHEN GeometryType(shape) IN ('POLYGON', 'MULTIPOLYGON') "
-			"THEN ST_AsText(ST_Multi(shape)) ELSE ST_AsText(ST_Multi(ST_CollectionExtract(shape, 2))) END FROM " +
-			relationShapes + " WHERE id = ANY($1::bigint[]) AND shape IS NOT NULL", {idArray(ids)});
+		Result r = db.exec(layers.shapes("relation", "id, CASE WHEN GeometryType(shape) IN ('POLYGON', 'MULTIPOLYGON') "
+			"THEN ST_AsText(ST_Multi(shape)) ELSE ST_AsText(ST_Multi(ST_CollectionExtract(shape, 2))) END",
+			"id = ANY($1::bigint[]) AND shape IS NOT NULL"), {idArray(ids)});
 		unordered_map<int64_t, string> shapes;
 		for (int i = 0; i < PQntuples(r.get()); i++)
 			shapes[toInt64(PQgetvalue(r.get(), i, 0))] = PQgetvalue(r.get(), i, 1);
@@ -268,20 +320,21 @@ private:
 	}
 
 	Database& db;
-	string meta, nodes, ways, relations, wayShapes, relationShapes;
+	Layers& layers;
 	unordered_set<int64_t> nodeIds, wayIds;
 };
 
 }
 
-void ReadOsmDatabase(const string& conninfo, const string& tablePrefix,
+void ReadOsmDatabase(const string& conninfo, const string& staticPrefix, const string& modifyPrefix,
 	double minLon, double minLat, double maxLon, double maxLat, OsmArea& area) {
 	Database db(conninfo);
 	// One snapshot for every query, so the parts agree with each other
 	db.exec("BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ");
 
-	AreaReader reader(db, tablePrefix);
-	bool useShapes = reader.check(tablePrefix);
+	Layers layers(db, staticPrefix, modifyPrefix);
+	bool useShapes = layers.check();
+	AreaReader reader(db, layers);
 
 	ostringstream box[4];
 	double values[4] = {minLon, minLat, maxLon, maxLat};

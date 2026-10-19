@@ -31,7 +31,12 @@ Read from a pycrocosm map database. Takes an optional libpq connection
 string; without one, the PG* environment variables are used. Needs \-\-bbox.
 .TP
 \fB\-\-table\-prefix
-The map database table set to read (pycrocosm_mod_ if not specified).
+The map database's static tables, the imported planet (planet_static_ if
+not specified). Empty to read the modify tables' views alone.
+.TP
+\fB\-\-modify\-prefix
+The map database's modify tables, the edits over the static ones
+(pycrocosm_mod_ if not specified).
 .TP
 \fB\-\-output
 Target path for vector tiles. Specify .mbtiles/.sqlite to create

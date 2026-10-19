@@ -4,3 +4,5 @@ data/
 **/*.o
 **/*.a
 .env
+coastline/
+landcover/
