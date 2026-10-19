@@ -11,7 +11,6 @@ using namespace rapidjson;
 SharedData::SharedData(Config &configIn, const class LayerDefinition &layers)
 	: layers(layers), config(configIn) {
 	outputMode=OptionsParser::OutputMode::File;
-	mergeSqlite=false;
 }
 
 SharedData::~SharedData() { }
@@ -27,11 +26,6 @@ void SharedData::writeMBTilesProjectData() {
 	mbtiles.writeMetadata("maxzoom", to_string(config.endZoom));
 
 	ostringstream bounds;
-	if (mergeSqlite) {
-		double cMinLon, cMaxLon, cMinLat, cMaxLat;
-		mbtiles.readBoundingBox(cMinLon, cMaxLon, cMinLat, cMaxLat);
-		config.enlargeBbox(cMinLon, cMaxLon, cMinLat, cMaxLat);
-	}
 	bounds << fixed << config.minLon << "," << config.minLat << "," << config.maxLon << "," << config.maxLat;
 	mbtiles.writeMetadata("bounds", bounds.str());
 
@@ -233,15 +227,6 @@ Config::Config() {
 }
 
 Config::~Config() { }
-
-// ----	Enlarge existing bounding box
-
-void Config::enlargeBbox(double cMinLon, double cMaxLon, double cMinLat, double cMaxLat) {
-	minLon = std::min(minLon, cMinLon);
-	maxLon = std::max(maxLon, cMaxLon);
-	minLat = std::min(minLat, cMinLat);
-	maxLat = std::max(maxLat, cMaxLat);
-}
 
 // ----	Read all config details from JSON file
 

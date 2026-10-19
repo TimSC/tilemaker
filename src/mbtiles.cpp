@@ -39,7 +39,6 @@ void MBTiles::openForWriting(string &filename) {
 	db << "CREATE TABLE IF NOT EXISTS tiles (zoom_level integer, tile_column integer, tile_row integer, tile_data blob);";
 	db << "CREATE UNIQUE INDEX IF NOT EXISTS tile_index on tiles (zoom_level, tile_column, tile_row);";
 	preparedStatements.emplace_back(db << "INSERT INTO tiles (zoom_level, tile_column, tile_row, tile_data) VALUES (?,?,?,?);");
-	preparedStatements.emplace_back(db << "REPLACE INTO tiles (zoom_level, tile_column, tile_row, tile_data) VALUES (?,?,?,?);");
 
 	db << "BEGIN;"; // begin a transaction
 	cout << "Creating mbtiles at " << filename << endl;
@@ -50,47 +49,16 @@ void MBTiles::writeMetadata(string key, string value) {
 	db << "REPLACE INTO metadata (name,value) VALUES (?,?);" << key << value;
 }
 
-void MBTiles::saveTile(int zoom, int x, int y, string *data, bool isMerge) {
+void MBTiles::saveTile(int zoom, int x, int y, string *data) {
 	int tmsY = pow(2, zoom) - 1 - y;
-	int s = isMerge ? 1 : 0;
-	preparedStatements[s].reset();
-	preparedStatements[s] << zoom << x << tmsY && *data;
-	preparedStatements[s].execute();
+	preparedStatements[0].reset();
+	preparedStatements[0] << zoom << x << tmsY && *data;
+	preparedStatements[0].execute();
 }
 
 void MBTiles::closeForWriting() {
 	preparedStatements[0].used(true);
-	preparedStatements[1].used(true);
 }
 
 // ---- Read mbtiles
 
-void MBTiles::readBoundingBox(double &minLon, double &maxLon, double &minLat, double &maxLat) {
-	string boundsStr;
-	db << "SELECT value FROM metadata WHERE name='bounds'" >> boundsStr;
-	vector<string> b = split_string(boundsStr,',');
-	minLon = stod(b[0]); minLat = stod(b[1]);
-	maxLon = stod(b[2]); maxLat = stod(b[3]);
-}
-
-bool MBTiles::readTileAndUncompress(string &data, int zoom, int x, int y, bool isCompressed, bool asGzip) {
-	int tmsY = pow(2,zoom) - 1 - y;
-	int exists=0;
-	db << "SELECT COUNT(*) FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?" << zoom << x << tmsY >> exists;
-	if (exists==0) return false;
-
-	std::vector<char> compressed;
-	db << "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?" << zoom << x << tmsY >> compressed;
-
-	if (!isCompressed) {
-		data = std::string(compressed.data(), compressed.size());
-		return true;
-	}
-
-	try {
-		decompress_string(data, compressed.data(), compressed.size(), asGzip);
-		return true;
-	} catch(std::runtime_error &e) {
-		return false;
-	}
-}

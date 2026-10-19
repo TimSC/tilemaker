@@ -26,7 +26,6 @@ po::options_description getParser(OptionsParser::Options& options) {
 		("modify-prefix", po::value< string >(&options.modifyPrefix)->default_value("pycrocosm_mod_"), "map database modify tables, the edits over the static ones (pgmap's dbtablemodifyprefix)")
 		("tile",   po::value< string >(),                                                 "render just this tile, as z/x/y (the area read is the tile and a margin around it)")
 		("bbox",   po::value< string >(&options.bbox),                                   "area to render (needed with --db, or if the input does not give its bounds), example: minlon,minlat,maxlon,maxlat")
-		("merge"  ,po::bool_switch(&options.mergeSqlite),                                "merge with existing .mbtiles (overwrites otherwise)")
 		("config", po::value< string >(&options.jsonFile)->default_value("config.json"), "config JSON file")
 		("process",po::value< string >(&options.luaFile)->default_value("process.lua"),  "tag-processing Lua file")
 		("quiet",  po::bool_switch(&options.quiet),                                      "quiet, suppress standard output")

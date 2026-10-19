@@ -439,7 +439,6 @@ void ProcessLayer(
 	TileCoordinates index,
 	uint zoom, 
 	const std::vector<std::vector<OutputObjectID>>& data,
-	vtzero::vector_tile existingTile,
 	vtzero::tile_builder& tile, 
 	const TileBbox& bbox,
 	const std::vector<uint>& ltx,
@@ -447,20 +446,6 @@ void ProcessLayer(
 ) {
 	std::string layerName = sharedData.layers.layers[ltx.at(0)].name;
 	vtzero::layer_builder vtLayer{tile, layerName, sharedData.config.mvtVersion, bbox.hires ? 8192u : 4096u};
-
-	vtzero::layer existingLayer = existingTile.get_layer_by_name(layerName);
-	if (existingLayer) {
-		while (auto feature = existingLayer.next_feature()) {
-			vtzero::geometry_feature_builder fb{vtLayer};
-			if (feature.has_id())
-				fb.set_id(feature.id());
-			fb.set_geometry(feature.geometry());
-			while (auto property = feature.next_property()) {
-				fb.add_property(property.key(), property.value());
-			}
-			fb.commit();
-		}
-	}
 
 	//TileCoordinate tileX = index.x;
 	TileCoordinate tileY = index.y;
@@ -521,16 +506,9 @@ void outputProc(
 			sharedData.config.minLat >= bbox.maxLat))
 		return;
 
-	// Read existing tile if merging
-	std::string rawExistingTile;
-	if (sharedData.mergeSqlite) {
-		sharedData.mbtiles.readTileAndUncompress(rawExistingTile, zoom, bbox.index.x, bbox.index.y, sharedData.config.compress, sharedData.config.gzip);
-	}
-	vtzero::vector_tile existingTile{rawExistingTile};
-
 	// Loop through layers
 	for (auto lt = sharedData.layers.layerOrder.begin(); lt != sharedData.layers.layerOrder.end(); ++lt) {
-		ProcessLayer(sources, attributeStore, coordinates, zoom, data, existingTile, tile, bbox, *lt, sharedData);
+		ProcessLayer(sources, attributeStore, coordinates, zoom, data, tile, bbox, *lt, sharedData);
 	}
 
 	// Write to file or sqlite
@@ -541,7 +519,7 @@ void outputProc(
 		tile.serialize(outputdata);
 
 		if (sharedData.config.compress) { compressed = compress_string(outputdata, Z_DEFAULT_COMPRESSION, sharedData.config.gzip); }
-		sharedData.mbtiles.saveTile(zoom, bbox.index.x, bbox.index.y, sharedData.config.compress ? &compressed : &outputdata, sharedData.mergeSqlite);
+		sharedData.mbtiles.saveTile(zoom, bbox.index.x, bbox.index.y, sharedData.config.compress ? &compressed : &outputdata);
 
 	} else if (sharedData.outputMode == OptionsParser::OutputMode::PMTiles) {
 		// Write to pmtiles

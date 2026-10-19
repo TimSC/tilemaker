@@ -3,6 +3,22 @@
 #include "external/minunit.h"
 #include "helpers.h"
 
+// Decompresses gzip (asGzip) or zlib data, to check compress_string
+static std::string decompress(const std::string& input, bool asGzip) {
+	z_stream zs = {};
+	inflateInit2(&zs, asGzip ? 15 + 16 : 15);
+	zs.next_in = (Bytef*)input.data();
+	zs.avail_in = input.size();
+	char buffer[4096];
+	zs.next_out = (Bytef*)buffer;
+	zs.avail_out = sizeof(buffer);
+	int result = inflate(&zs, Z_FINISH);
+	std::string output(buffer, sizeof(buffer) - zs.avail_out);
+	inflateEnd(&zs);
+	if (result != Z_STREAM_END) throw std::runtime_error("decompression failed");
+	return output;
+}
+
 MU_TEST(test_open_file) {
 	FilePtr fp = openFile("test/test.jsonl", "r");
 	mu_check(fp != nullptr);
@@ -22,14 +38,12 @@ MU_TEST(test_compression_gzip) {
 
 	for (int level = 1; level < 9; level++) {
 		std::string gzipped = compress_string(input, level, true);
-		std::string unzipped;
-		decompress_string(unzipped, gzipped.data(), gzipped.size(), true);
+		std::string unzipped = decompress(gzipped, true);
 		mu_check(unzipped == input);
 	}
 
 	std::string gzipped = compress_string(input, -1, true);
-	std::string unzipped;
-	decompress_string(unzipped, gzipped.data(), gzipped.size(), true);
+	std::string unzipped = decompress(gzipped, true);
 	mu_check(unzipped == input);
 
 }
@@ -39,14 +53,12 @@ MU_TEST(test_compression_zlib) {
 
 	for (int level = 1; level < 9; level++) {
 		std::string gzipped = compress_string(input, level, false);
-		std::string unzipped;
-		decompress_string(unzipped, gzipped.data(), gzipped.size(), false);
+		std::string unzipped = decompress(gzipped, false);
 		mu_check(unzipped == input);
 	}
 
 	std::string gzipped = compress_string(input, -1, false);
-	std::string unzipped;
-	decompress_string(unzipped, gzipped.data(), gzipped.size(), false);
+	std::string unzipped = decompress(gzipped, false);
 	mu_check(unzipped == input);
 }
 

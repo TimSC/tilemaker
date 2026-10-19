@@ -95,7 +95,6 @@ public:
 	virtual ~Config();
 
 	void readConfig(rapidjson::Document &jsonConfig, bool &hasClippingBox, Box &clippingBox);
-	void enlargeBbox(double cMinLon, double cMaxLon, double cMinLat, double cMaxLat);
 };
 
 ///\brief Data used by worker threads ::outputProc to write output
@@ -104,7 +103,6 @@ class SharedData {
 public:
 	const class LayerDefinition &layers;
 	OptionsParser::OutputMode outputMode;
-	bool mergeSqlite;
 	MBTiles mbtiles;
 	PMTiles pmtiles;
 	std::string outputFile;

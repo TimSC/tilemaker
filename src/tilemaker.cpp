@@ -92,20 +92,12 @@ int main(const int argc, const char* argv[]) {
 	vector<string> bboxElements = parseBox(options.bbox);
 
 	// ---- Remove existing .mbtiles if it exists
-	if ((options.outputMode == OptionsParser::OutputMode::MBTiles || options.outputMode == OptionsParser::OutputMode::PMTiles) && !options.mergeSqlite && static_cast<bool>(std::ifstream(options.outputFile))) {
-		cout << "Output file exists, overwriting";
-		if (options.outputMode == OptionsParser::OutputMode::MBTiles) cout << " (use --merge to keep it)";
-		cout << endl;
+	if ((options.outputMode == OptionsParser::OutputMode::MBTiles || options.outputMode == OptionsParser::OutputMode::PMTiles) && static_cast<bool>(std::ifstream(options.outputFile))) {
+		cout << "Output file exists, overwriting" << endl;
 		if (remove(options.outputFile.c_str()) != 0) {
 			cerr << "Couldn't remove existing file" << endl;
-			return 0;
+			return -1;
 		}
-	} else if (options.mergeSqlite && options.outputMode != OptionsParser::OutputMode::MBTiles) {
-		cerr << "--merge only works with .mbtiles" << endl;
-		return 0;
-	} else if (options.mergeSqlite && !static_cast<bool>(std::ifstream(options.outputFile))) {
-		cout << "--merge specified but .mbtiles file doesn't already exist, ignoring" << endl;
-		options.mergeSqlite = false;
 	}
 
 
@@ -295,7 +287,6 @@ int main(const int argc, const char* argv[]) {
 	class SharedData sharedData(config, layers);
 	sharedData.outputFile = options.outputFile;
 	sharedData.outputMode = options.outputMode;
-	sharedData.mergeSqlite = options.mergeSqlite;
 
 	// ----	Initialise mbtiles/pmtiles if required
 	

@@ -59,30 +59,6 @@ std::string compress_string(const std::string& str,
 	return rv;
 }
 
-// Decompress gzip or zlib data into output
-void decompress_string(std::string& output, const char* input, uint32_t inputSize, bool asGzip) {
-	z_stream zs = {};
-	if (inflateInit2(&zs, asGzip ? 15 + 16 : 15) != Z_OK)
-		throw std::runtime_error("inflateInit2 failed");
-
-	output.clear();
-	zs.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input));
-	zs.avail_in = inputSize;
-	char buffer[65536];
-	int result;
-	do {
-		zs.next_out = reinterpret_cast<Bytef*>(buffer);
-		zs.avail_out = sizeof(buffer);
-		result = inflate(&zs, Z_NO_FLUSH);
-		if (result != Z_OK && result != Z_STREAM_END) {
-			inflateEnd(&zs);
-			throw std::runtime_error("decompression failed");
-		}
-		output.append(buffer, sizeof(buffer) - zs.avail_out);
-	} while (result != Z_STREAM_END);
-	inflateEnd(&zs);
-}
-
 // Parse a Boost error
 std::string boost_validity_error(unsigned failure) {
 	switch (failure) {

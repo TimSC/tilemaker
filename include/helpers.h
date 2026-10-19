@@ -42,7 +42,6 @@ using FilePtr = std::unique_ptr<FILE, FileCloser>;
 
 FilePtr openFile(const std::string &filename, const char *mode);
 
-void decompress_string(std::string& output, const char* input, uint32_t inputSize, bool asGzip = false);
 double bboxElementFromStr(const std::string& number);
 
 std::vector<std::string> parseBox(const std::string& bbox);

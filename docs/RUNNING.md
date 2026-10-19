@@ -123,12 +123,6 @@ of these three examples:
     -- Include everything but not buildings
     way_keys = {"~building"}
 
-## Merging
-
-You can use the `--merge` switch to add to an existing .mbtiles, for example tiles of a
-neighbouring area, or low zoom tiles made another way. Any OSM objects which appear in both
-will be written twice.
-
 ## Performance
 
 tilemaker-core runs on one thread: a single tile has nothing to share between threads, and an
