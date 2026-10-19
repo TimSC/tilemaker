@@ -27,7 +27,6 @@ public:
 	Ring scaleRing(Ring const &src) const;
 	void scaleGeometry(MultiPolygon &dst, MultiPolygon const &src) const;
 	MultiPolygon scaleGeometry(MultiPolygon const &src) const;
-	std::pair<double, double> floorLatpLon(double latp, double lon) const;
 
 	Box getTileBox() const;
 	Box getExtendBox() const;

@@ -19,7 +19,6 @@ std::ostream& operator<<(std::ostream& os, OutputGeometryType geomType);
 /**
  * \brief OutputObject - any object (node, linestring, polygon) to be outputted to tiles
 */
-#pragma pack(push, 4)
 class OutputObject {
 
 public:
@@ -39,12 +38,12 @@ public:
 	{ }
 
 
-	NodeID objectID 			: 36;					// id of point/linestring/polygon
-	unsigned minZoom 			: 4;					// minimum zoom level in which object is written
-	AttributeIndex attributes   : 30;					// index in attribute storage
-	OutputGeometryType geomType : 2;					// point, linestring, polygon
-	uint_least8_t layer 		: 8;					// what layer is it in?
-	short z_order				: 16;					// used for sorting features within layers
+	NodeID objectID;				// id of point/linestring/polygon in the source's geometry store
+	unsigned minZoom;				// minimum zoom level in which object is written
+	AttributeIndex attributes;		// index in attribute storage
+	OutputGeometryType geomType;	// point, linestring, polygon
+	uint_least8_t layer;			// what layer is it in?
+	short z_order;					// used for sorting features within layers
 
 	template<typename T>
 	static inline T finite_cast(double v) {
@@ -79,7 +78,6 @@ public:
 	bool compatible(const OutputObject &other);
 
 };
-#pragma pack(pop)
 
 struct OutputObjectID {
 	OutputObject oo;

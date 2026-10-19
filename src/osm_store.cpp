@@ -183,7 +183,4 @@ void OSMStore::reportSize() const {
 	std::cout << "Stored " << nodes.size() << " nodes, " << ways.size() << " ways" << std::endl;
 }
 
-void OSMStore::clear() {
-	nodes.clear();
-	ways.clear();
-}
+

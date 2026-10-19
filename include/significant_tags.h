@@ -29,7 +29,6 @@ public:
 	bool filter(const TagMap& tags) const;
 
 	static TagFilter parseFilter(std::string rawTag);
-	bool enabled() const;
 
 private:
 	bool enabled_;

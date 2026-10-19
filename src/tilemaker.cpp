@@ -1,31 +1,15 @@
 /*! \file */ 
 
-// C++ includes
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <cstdint>
-#include <unordered_map>
-#include <unordered_set>
 #include <string>
 #include <sstream>
-#include <cmath>
-#include <stdexcept>
 #include <chrono>
 
-// Other utilities
-#include <boost/algorithm/string.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/program_options.hpp>
-#include <boost/variant.hpp>
-#include <boost/algorithm/string.hpp>
-
 #include "rapidjson/document.h"
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
 #include "rapidjson/filereadstream.h"
-#include "rapidjson/filewritestream.h"
 #include "rapidjson/error/en.h"
 
 #ifndef _MSC_VER
@@ -33,19 +17,14 @@
 #endif
 
 #include "geom.h"
-
-// Tilemaker code
 #include "config_validator.h"
 #include "helpers.h"
 #include "coordinates.h"
 #include "coordinates_geom.h"
 #include "significant_tags.h"
-
 #include "attribute_store.h"
 #include "output_object.h"
 #include "osm_lua_processing.h"
-#include "mbtiles.h"
-
 #include "options_parser.h"
 #include "shared_data.h"
 #include "osm_area.h"
@@ -56,16 +35,8 @@
 #include "osm_mem_tiles.h"
 #include "shp_mem_tiles.h"
 
-
-#ifndef TM_VERSION
-#define TM_VERSION (version not set)
-#endif
-#define STR1(x)  #x
-#define STR(x)  STR1(x)
-
 // Namespaces
 using namespace std;
-namespace po = boost::program_options;
 namespace geom = boost::geometry;
 
 // Global verbose switch
@@ -270,6 +241,13 @@ int main(const int argc, const char* argv[]) {
 		for (size_t layerNum=0; layerNum<layers.layers.size(); layerNum++) {
 			LayerDef &layer = layers.layers[layerNum];
 			if(layer.indexed) { shpMemTiles.CreateNamedLayerIndex(layer.name); }
+
+			// A layer only shown below the zooms rendered is not read, unless the
+			// Lua profile can query it
+			if (layer.source.size()>0 && layer.maxzoom < config.startZoom && !layer.indexed) {
+				if (verbose) cout << "Skipping " << layer.name << ", only shown below z" << config.startZoom << endl;
+				continue;
+			}
 
 			if (layer.source.size()>0) {
 				if (!hasClippingBox) {

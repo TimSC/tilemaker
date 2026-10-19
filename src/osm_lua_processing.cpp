@@ -10,7 +10,6 @@
 #include "tag_map.h"
 #include "node_store.h"
 #include "polylabel.h"
-#include <signal.h>
 
 using namespace std;
 
@@ -19,26 +18,6 @@ kaguya::State *g_luaState = nullptr;
 OsmLuaProcessing* osmLuaProcessing = nullptr;
 
 std::unordered_map<std::string, std::string> OsmLuaProcessing::dataStore;
-
-void handleOsmLuaProcessingUserSignal(int signum) {
-	osmLuaProcessing->handleUserSignal(signum);
-}
-
-class Sigusr1Handler {
-public:
-	Sigusr1Handler() {
-#ifndef _WIN32
-		signal(SIGUSR1, handleOsmLuaProcessingUserSignal);
-#endif
-	}
-
-	void initialize() {
-		// No-op just to ensure the compiler doesn't optimize away
-		// the handler.
-	}
-};
-
-static Sigusr1Handler sigusr1Handler;
 
 // A key in `currentTags`. If Lua code refers to an absent key,
 // found will be false.
@@ -238,7 +217,6 @@ OsmLuaProcessing::OsmLuaProcessing(
 	currentTags(NULL),
 	layers(layers) {
 
-	sigusr1Handler.initialize();
 
 	// ----	Initialise Lua
 	g_luaState = &luaState;
@@ -314,10 +292,6 @@ OsmLuaProcessing::~OsmLuaProcessing() {
 	luaState("if exit_function~=nil then exit_function() end");
 }
 
-void OsmLuaProcessing::handleUserSignal(int signum) {
-	std::cout << "processing OSM ID " << originalOsmID << std::endl;
-}
-
 // ----	Helpers provided for main routine
 
 // Has this object been assigned to any layers?
@@ -331,10 +305,6 @@ bool OsmLuaProcessing::canRemapShapefiles() {
 
 bool OsmLuaProcessing::canReadRelations() {
 	return supportsReadingRelations;
-}
-
-bool OsmLuaProcessing::canPostScanRelations() {
-	return supportsPostScanRelations;
 }
 
 bool OsmLuaProcessing::canWriteNodes() {

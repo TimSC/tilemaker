@@ -63,9 +63,6 @@ AttributeIndex AttributeStore::add(AttributeSet &attributes) {
 	if (it != setIndexes.end())
 		return it->second;
 
-	// OutputObject keeps the index in 30 bits
-	if (sets.size() >= (1u << 30))
-		throw std::out_of_range("too many attribute sets");
 	AttributeIndex index = sets.size();
 	sets.push_back(attributes);
 	setIndexes[attributes] = index;

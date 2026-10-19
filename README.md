@@ -80,7 +80,6 @@ Licenses of third-party libraries:
 
 - [cppo5m](https://github.com/TimSC/cppo5m) is licensed under BSD, and its iso8601lib under MIT
 - [kaguya](https://github.com/satoren/kaguya) is licensed under the Boost Software Licence
-- [libdeflate](https://github.com/ebiggers/libdeflate/) is licensed under MIT
 - [libpopcnt](https://github.com/kimwalisch/libpopcnt) is licensed under BSD 2-clause
 - [minunit](https://github.com/siu/minunit) is licensed under MIT
 - [pmtiles](https://github.com/protomaps/PMTiles) is licensed under BSD 3-clause

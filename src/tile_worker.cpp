@@ -3,14 +3,12 @@
 #include <fstream>
 #include <boost/filesystem.hpp>
 #include <vtzero/builder.hpp>
-#include <signal.h>
 #include "helpers.h"
 #include "visvalingam.h"
 #include "simplify_buildings.h"
 using namespace std;
 extern bool verbose;
 
-static bool enabledUserSignal = false;
 static MultiPolygon scaledMultiPolygon;
 typedef std::vector<OutputObjectID>::const_iterator OutputObjectsConstIt;
 typedef std::pair<OutputObjectsConstIt, OutputObjectsConstIt> OutputObjectsConstItPair;
@@ -504,12 +502,6 @@ void ProcessLayer(
 	}
 }
 
-bool signalStop=false;
-void handleUserSignal(int signum) {
-	std::cout << "User requested break in processing" << std::endl;
-	signalStop=true;
-}
-
 void outputProc(
 	SharedData& sharedData, 
 	const SourceList& sources,
@@ -537,16 +529,7 @@ void outputProc(
 	vtzero::vector_tile existingTile{rawExistingTile};
 
 	// Loop through layers
-#ifndef _WIN32
-	if (!enabledUserSignal) {
-		signal(SIGUSR1, handleUserSignal);
-		enabledUserSignal = true;
-	}
-#endif
-	signalStop=false;
-
 	for (auto lt = sharedData.layers.layerOrder.begin(); lt != sharedData.layers.layerOrder.end(); ++lt) {
-		if (signalStop) break;
 		ProcessLayer(sources, attributeStore, coordinates, zoom, data, existingTile, tile, bbox, *lt, sharedData);
 	}
 

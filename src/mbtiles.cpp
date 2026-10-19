@@ -65,28 +65,12 @@ void MBTiles::closeForWriting() {
 
 // ---- Read mbtiles
 
-void MBTiles::openForReading(string &filename) {
-	db.init(filename);
-}
-
 void MBTiles::readBoundingBox(double &minLon, double &maxLon, double &minLat, double &maxLat) {
 	string boundsStr;
 	db << "SELECT value FROM metadata WHERE name='bounds'" >> boundsStr;
 	vector<string> b = split_string(boundsStr,',');
 	minLon = stod(b[0]); minLat = stod(b[1]);
 	maxLon = stod(b[2]); maxLat = stod(b[3]);
-}
-
-void MBTiles::readTileList(std::vector<std::tuple<int,int,int>> &tileList) {
-	db << "SELECT zoom_level,tile_column,tile_row FROM tiles" >> [&](int z,int col, int row) {
-		tileList.emplace_back(std::make_tuple(z,col,row));
-	};
-}
-
-vector<char> MBTiles::readTile(int zoom, int col, int row) {
-	vector<char> pbfBlob;
-	db << "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?" << zoom << col << row >> pbfBlob;
-	return pbfBlob;
 }
 
 bool MBTiles::readTileAndUncompress(string &data, int zoom, int x, int y, bool isCompressed, bool asGzip) {

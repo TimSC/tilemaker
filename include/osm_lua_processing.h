@@ -76,14 +76,12 @@ public:
 	~OsmLuaProcessing();
 
 	// ----	Helpers provided for main routine
-	void handleUserSignal(int signum);
 
 	// Has this object been assigned to any layers?
 	bool empty();
 	
 	// Do we have Lua routines for non-MP relations?
 	bool canReadRelations();
-	bool canPostScanRelations();
 	bool canWriteNodes();
 	bool canWriteWays();
 	bool canWriteRelations();

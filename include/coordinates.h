@@ -100,10 +100,8 @@ double latp2lat(double latp);
 // Tile conversions
 double lon2tilexf(double lon, uint8_t z);
 double latp2tileyf(double latp, uint8_t z);
-double lat2tileyf(double lat, uint8_t z);
 uint32_t lon2tilex(double lon, uint8_t z);
 uint32_t latp2tiley(double latp, uint8_t z);
-uint32_t lat2tiley(double lat, uint8_t z);
 double tilex2lon(uint32_t x, uint8_t z);
 double tiley2latp(uint32_t y, uint8_t z);
 double tiley2lat(uint32_t y, uint8_t z);
@@ -117,7 +115,6 @@ TileCoordinates latpLon2index(LatpLon ll, uint8_t baseZoom);
 constexpr double RadiusMeter = 6371000;
 
 // Convert to actual length
-double degp2meter(double degp, double latp);
 
 double meter2degp(double meter, double latp);
 

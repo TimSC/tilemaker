@@ -16,28 +16,15 @@ namespace {
 // The largest way ID tilemaker's output object IDs can hold
 const uint64_t MAX_WAY_ID = 1ull << 42;
 
-// An object's tags as a TagMap. A TagMap keeps pointers to the data_views it
-// is given, rather than copies, so they are kept here, beside it, until the
-// next object's tags are read. (The strings they view must last as long.)
-class AreaTags {
-public:
-	TagMap map;
-
-	template<class Tags>
-	void read(const Tags& in) {
-		map.reset();
-		views.clear();
-		views.reserve(in.size() * 2); // no reallocation, which would move them
-		for (const auto& tag : in) {
-			views.emplace_back(tag.first.data(), tag.first.size());
-			views.emplace_back(tag.second.data(), tag.second.size());
-			map.addTag(views[views.size() - 2], views.back());
-		}
-	}
-
-private:
-	std::vector<protozero::data_view> views;
-};
+// An object's tags as a TagMap, which views the strings
+template<class Tags>
+void readTags(const Tags& in, TagMap& tags) {
+	tags.reset();
+	for (const auto& tag : in)
+		tags.addTag(
+			protozero::data_view(tag.first.data(), tag.first.size()),
+			protozero::data_view(tag.second.data(), tag.second.size()));
+}
 
 const string* findTag(const OsmAreaTags& tags, const string& key) {
 	for (const auto& tag : tags)
@@ -97,17 +84,17 @@ bool readRelationShape(const string& wkt, RelationShape& shape) {
 // see, and note which ways are wanted by relations even if way_keys skips them.
 void scanRelations(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing& output,
                    const SignificantTags& wayKeys, unordered_set<WayID>& usedWays) {
-	AreaTags tags;
+	TagMap tags;
 	for (const OsmAreaRelation& relation : area.relations) {
 		RelationID relid = static_cast<RelationID>(relation.id);
-		tags.read(relation.tags);
+		readTags(relation.tags, tags);
 
 		bool isAccepted = false;
 		if (!relationIsType(relation, "multipolygon")) {
 			if (output.canReadRelations())
-				isAccepted = output.scanRelation(relid, tags.map);
+				isAccepted = output.scanRelation(relid, tags);
 			if (!isAccepted) continue;
-		} else if (!wayKeys.filter(tags.map)) {
+		} else if (!wayKeys.filter(tags)) {
 			continue;
 		}
 
@@ -135,16 +122,16 @@ void scanRelations(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing& ou
 
 void processNodes(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing& output,
                   const SignificantTags& nodeKeys) {
-	AreaTags tags;
+	TagMap tags;
 	for (const OsmAreaNode& node : area.nodes) {
 		NodeID nodeId = static_cast<NodeID>(node.id);
 		LatpLon latplon = toLatpLon(node.lat, node.lon);
 		osmStore.nodes.insert(nodeId, latplon);
 
 		if (node.tags.empty() || !output.canWriteNodes()) continue;
-		tags.read(node.tags);
-		if (nodeKeys.filter(tags.map))
-			output.setNode(nodeId, latplon, tags.map);
+		readTags(node.tags, tags);
+		if (nodeKeys.filter(tags))
+			output.setNode(nodeId, latplon, tags);
 	}
 }
 
@@ -165,7 +152,7 @@ bool wayNodeLocations(const OsmAreaWay& way, const OSMStore& osmStore, LatpLonVe
 
 void processWays(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing& output,
                  const SignificantTags& wayKeys, const unordered_set<WayID>& usedWays) {
-	AreaTags tags;
+	TagMap tags;
 	LatpLonVec llVec;
 	size_t incomplete = 0;
 	for (const OsmAreaWay& way : area.ways) {
@@ -187,10 +174,10 @@ void processWays(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing& outp
 		osmStore.ways.insert(wayId, std::vector<LatpLon>(llVec.begin(), llVec.end()));
 
 		if (!output.canWriteWays()) continue;
-		tags.read(way.tags);
-		if (!usedWays.count(wayId) && !wayKeys.filter(tags.map)) continue;
+		readTags(way.tags, tags);
+		if (!usedWays.count(wayId) && !wayKeys.filter(tags)) continue;
 		try {
-			output.setWay(wayId, llVec, tags.map);
+			output.setWay(wayId, llVec, tags);
 		} catch (out_of_range& err) {
 			cerr << "Way " << wayId << ": " << err.what() << endl;
 		}
@@ -201,7 +188,7 @@ void processWays(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing& outp
 
 void processRelations(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing& output,
                       const SignificantTags& wayKeys) {
-	AreaTags tags;
+	TagMap tags;
 	WayVec outerWayVec, innerWayVec;
 	vector<RelationNodeMember> nodeMembers;
 	RelationShape shape;
@@ -226,14 +213,14 @@ void processRelations(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing&
 
 		// relation_postscan_function may have changed the tags
 		if (osmStore.scannedRelations.has_relation_tags(relid))
-			tags.read(osmStore.scannedRelations.relation_tags(relid));
+			readTags(osmStore.scannedRelations.relation_tags(relid), tags);
 		else
-			tags.read(relation.tags);
+			readTags(relation.tags, tags);
 
-		if (!osmStore.usedRelations.count(relid) && !wayKeys.filter(tags.map)) continue;
+		if (!osmStore.usedRelations.count(relid) && !wayKeys.filter(tags)) continue;
 		bool hasShape = !relation.shapeWkt.empty() && readRelationShape(relation.shapeWkt, shape);
 		try {
-			output.setRelation(relid, nodeMembers, outerWayVec, innerWayVec, tags.map, isMultiPolygon, isInnerOuter,
+			output.setRelation(relid, nodeMembers, outerWayVec, innerWayVec, tags, isMultiPolygon, isInnerOuter,
 				hasShape ? &shape : nullptr);
 		} catch (out_of_range& err) {
 			// A member way is missing, most likely outside the area

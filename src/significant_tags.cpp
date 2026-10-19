@@ -46,7 +46,6 @@ SignificantTags::SignificantTags(std::vector<std::string> rawTags): enabled_(tru
 	}
 }
 
-bool SignificantTags::enabled() const { return enabled_; }
 
 bool SignificantTags::filter(const TagMap& tags) const {
 	if (!enabled_)

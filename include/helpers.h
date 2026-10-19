@@ -8,7 +8,7 @@
 #include <sstream>
 #include <vector>
 
-#define Z_DEFAULT_COMPRESSION -1
+#include <zlib.h>
 
 #ifdef _MSVC_LANG
 #define ISATTY true

@@ -59,6 +59,8 @@ find_package(libshp REQUIRED)
 
 find_package(PostgreSQL REQUIRED)
 
+find_package(ZLIB REQUIRED)
+
 # cppo5m reads the OSM input. By default it is built from the submodule; set
 # CPPO5M_SOURCE_DIR to another tree, or to empty to use an installed one.
 set(CPPO5M_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cppo5m" CACHE PATH "cppo5m source tree to build with")
@@ -148,17 +150,6 @@ file(GLOB tilemaker_src_files
 	src/coordinates.cpp
 	src/coordinates_geom.cpp
 	src/declutter.cpp
-	src/external/libdeflate/lib/adler32.c
-	src/external/libdeflate/lib/arm/cpu_features.c
-	src/external/libdeflate/lib/crc32.c
-	src/external/libdeflate/lib/deflate_compress.c
-	src/external/libdeflate/lib/deflate_decompress.c
-	src/external/libdeflate/lib/gzip_compress.c
-	src/external/libdeflate/lib/gzip_decompress.c
-	src/external/libdeflate/lib/utils.c
-	src/external/libdeflate/lib/x86/cpu_features.c
-	src/external/libdeflate/lib/zlib_compress.c
-	src/external/libdeflate/lib/zlib_decompress.c
 	src/geojson_processor.cpp
 	src/geom.cpp
 	src/helpers.cpp
@@ -194,6 +185,7 @@ target_link_libraries(tilemaker
 		Rapidjson::rapidjson
 		cppo5m::cppo5m
 		PostgreSQL::PostgreSQL
+		ZLIB::ZLIB
 		Boost::filesystem Boost::program_options)
 if(BOOST_HAS_SYSTEM)
 	target_link_libraries(tilemaker Boost::system)
@@ -226,9 +218,6 @@ install(TARGETS tilemaker tilemaker-server RUNTIME DESTINATION bin)
 option(TILEMAKER_BUILD_TESTS "Build the tests" ON)
 if(TILEMAKER_BUILD_TESTS)
 	enable_testing()
-	set(libdeflate_src_files ${tilemaker_src_files})
-	list(FILTER libdeflate_src_files INCLUDE REGEX "libdeflate")
-
 	function(tilemaker_test name)
 		add_executable(test_${name} test/${name}.test.cpp ${ARGN})
 		target_include_directories(test_${name} PRIVATE include ${CMAKE_BINARY_DIR})
@@ -242,7 +231,8 @@ if(TILEMAKER_BUILD_TESTS)
 
 	tilemaker_test(attribute_store src/attribute_store.cpp)
 	tilemaker_test(config_validator src/config_validator.cpp)
-	tilemaker_test(helpers src/helpers.cpp ${libdeflate_src_files})
+	tilemaker_test(helpers src/helpers.cpp)
+	target_link_libraries(test_helpers ZLIB::ZLIB)
 	tilemaker_test(options_parser src/options_parser.cpp)
 	tilemaker_test(osm_reader src/osm_reader.cpp)
 	target_link_libraries(test_osm_reader cppo5m::cppo5m)

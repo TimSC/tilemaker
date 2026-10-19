@@ -136,7 +136,6 @@ public:
 
 	using tag_map_t = boost::container::flat_map<std::string, std::string>;
 
-	void clear();
 	void reportSize() const;
 
 	// Relation -> MultiPolygon or MultiLinestring

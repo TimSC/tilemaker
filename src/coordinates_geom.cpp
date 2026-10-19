@@ -91,10 +91,6 @@ MultiPolygon TileBbox::scaleGeometry(MultiPolygon const &src) const {
 	return dst;
 }
 
-pair<double, double> TileBbox::floorLatpLon(double latp, double lon) const {
-	auto p = scaleLatpLon(latp, lon);
-	return std::make_pair( -(p.second * yscale - maxLatp), p.first * xscale + minLon);
-}
 
 Box TileBbox::getTileBox() const {
 	double xmargin = (maxLon -minLon )/8192.0;
