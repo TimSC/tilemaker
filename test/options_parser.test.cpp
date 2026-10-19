@@ -86,6 +86,19 @@ MU_TEST(test_options_parser) {
 
 	ASSERT_THROWS("--db needs a --bbox", "--output", "foo.mbtiles", "--db");
 
+	// One tile, from the map database
+	{
+		std::vector<std::string> args = {"--output", "tile", "--db", "--tile", "14/8142/5499"};
+		auto opts = parse(args);
+		mu_check(opts.hasTile);
+		mu_check(opts.tileZoom == 14 && opts.tileX == 8142 && opts.tileY == 5499);
+		mu_check(opts.outputMode == OutputMode::File);
+	}
+
+	ASSERT_THROWS("--tile should be z/x/y", "--output", "tile", "--tile", "14/8142");
+	ASSERT_THROWS("--tile should be z/x/y", "--output", "tile", "--tile", "2/4/0");
+	ASSERT_THROWS("--tile should be z/x/y", "--output", "tile", "--tile", "14/1/2.pbf");
+
 	ASSERT_THROWS("Couldn't open .json config", "--input", "foo", "--output", "bar", "--config", "nonexistent-config.json");
 	ASSERT_THROWS("Couldn't open .lua script", "--input", "foo", "--output", "bar", "--process", "nonexistent-script.lua");
 }

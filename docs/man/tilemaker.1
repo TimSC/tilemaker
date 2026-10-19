@@ -49,6 +49,10 @@ not specified.
 \fB\-\-merge
 Merge with existing .mbtiles/.sqlite file.
 .TP
+\fB\-\-tile
+Render just this tile, given as z/x/y, reading the tile and a margin around
+it. Write it to a directory.
+.TP
 \fB\-\-bbox
 The area to render (as minlon,minlat,maxlon,maxlat). Needed with \-\-db;
 otherwise the bounds the input declares, or of its nodes, are used.

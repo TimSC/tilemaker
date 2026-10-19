@@ -67,6 +67,43 @@ those outside the area by ID, and multipolygons whose ways reach outside the are
 ways fetched too, so that they are whole. Other relations, such as boundaries, are built from
 the ways in the area only.
 
+## One tile
+
+`--tile z/x/y` renders just that tile, for example to make tiles as they are asked for:
+
+    tilemaker --db --tile 14/8142/5499 --output tiles
+
+The area read is the tile and a margin of an eighth of it on each side, so that labels and lines
+crossing its edges are included; `--bbox` is not needed. Write it to a directory: the tile is at
+`tiles/14/8142/5499.pbf`, gzipped unless the config's `compress` setting says otherwise, and is
+missing if there was nothing to draw. The tile must be z11 or higher, and no higher than the
+config's maxzoom.
+
+Without `--tile`, tilemaker renders every tile of the area, from z11 to maxzoom.
+
+## The demonstration server
+
+`tilemaker-server` shows tiles on a map in a browser. It serves an .mbtiles:
+
+    cd server
+    tilemaker-server area.mbtiles
+
+or, with `--render`, renders each tile from the map database as the map asks for it, by running
+tilemaker with `--tile` (the program beside it, unless `--tilemaker` says otherwise):
+
+    cd server
+    tilemaker-server --render --bbox -1.095,50.795,-1.085,50.8 \
+                     --config ../resources/config-openmaptiles.json \
+                     --process ../resources/process-openmaptiles.lua
+
+`--bbox` is where the map opens. The database is given as for tilemaker (`--db`, or the `PG*`
+environment variables, and `--table-prefix`). `--threads` tiles are rendered at once (4 by
+default), each allowed `--timeout` seconds (60). Tiles below z11 are empty. Each tile is
+rendered afresh, so the map shows edits as soon as they are made; the config, Lua and any
+shapefiles are loaded again for each tile, so keep large shapefiles out of the config.
+
+The map is at http://localhost:8081/ (`--port` to change it).
+
 ## Filtering
 
 You can tell tilemaker to only look at objects with certain tags. If you're making a thematic

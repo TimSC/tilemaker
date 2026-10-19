@@ -4,6 +4,8 @@ ARG TILEMAKER_BUILD_VERSION=
 LABEL Description="Tilemaker" Version="${TILEMAKER_VERSION}"
 
 ARG BUILD_DEBUG=
+# How many files to compile at once (all the processors if empty)
+ARG BUILD_JOBS=
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
@@ -46,7 +48,7 @@ RUN mkdir build && \
     else \
         cmake -DCMAKE_BUILD_TYPE=Debug -DTILEMAKER_BUILD_TESTS=OFF $tm_version_arg ..; \
     fi; \
-    cmake --build . --parallel $(nproc) && \
+    cmake --build . --parallel ${BUILD_JOBS:-$(nproc)} && \
     if [ -z "$BUILD_DEBUG" ]; then \
         strip tilemaker && \
         strip tilemaker-server; \

@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
+#include <sstream>
 #include <cmath>
 #include <stdexcept>
 #include <thread>
@@ -110,6 +111,23 @@ int main(const int argc, const char* argv[]) {
 	}
 
 	verbose = options.verbose;
+
+	// One tile: read it and a margin around it, for what crosses its edges
+	// (labels, and the buffer tiles are drawn with)
+	if (options.hasTile) {
+		if (options.tileZoom < MIN_ZOOM) {
+			cerr << "Tiles below z" << MIN_ZOOM << " are not rendered" << endl;
+			return -1;
+		}
+		const uint8_t z = options.tileZoom;
+		double west = tilex2lon(options.tileX, z), east = tilex2lon(options.tileX + 1, z);
+		double north = tiley2lat(options.tileY, z), south = tiley2lat(options.tileY + 1, z);
+		double marginLon = (east - west) / 8, marginLat = (north - south) / 8;
+		ostringstream box;
+		box.precision(10);
+		box << west - marginLon << "," << south - marginLat << "," << east + marginLon << "," << north + marginLat;
+		options.bbox = box.str();
+	}
 
 	vector<string> bboxElements = parseBox(options.bbox);
 
@@ -221,7 +239,13 @@ int main(const int argc, const char* argv[]) {
 		cerr << "maxzoom must be at least " << MIN_ZOOM << endl;
 		return -1;
 	}
-	if (config.startZoom < MIN_ZOOM) {
+	if (options.hasTile) {
+		if (options.tileZoom > config.endZoom) {
+			cerr << "The config's maxzoom is " << config.endZoom << endl;
+			return -1;
+		}
+		config.startZoom = config.endZoom = options.tileZoom;
+	} else if (config.startZoom < MIN_ZOOM) {
 		cout << "Rendering from z" << MIN_ZOOM << " (config minzoom is " << config.startZoom << ")" << endl;
 		config.startZoom = MIN_ZOOM;
 	}
@@ -373,9 +397,12 @@ int main(const int argc, const char* argv[]) {
 
 		const auto& zoomResult = zoomResults[zoom];
 		int numTiles = 0;
-		// Only the tiles over the area
+		// Only the tiles over the area, or the one tile asked for
 		uint32_t minX = 0, maxX = (1u << zoom) - 1, minY = 0, maxY = (1u << zoom) - 1;
-		if (hasClippingBox) {
+		if (options.hasTile) {
+			minX = maxX = options.tileX;
+			minY = maxY = options.tileY;
+		} else if (hasClippingBox) {
 			minX = lon2tilex(clippingBox.min_corner().x(), zoom);
 			maxX = std::min(maxX, lon2tilex(clippingBox.max_corner().x(), zoom));
 			minY = latp2tiley(clippingBox.max_corner().y(), zoom);

@@ -32,6 +32,37 @@ cppo5m is built from the submodule. To build with another copy, pass
 
 Pass `-DTILEMAKER_BUILD_TESTS=OFF` to build only tilemaker.
 
+### Docker Compose
+
+`docker-compose.yml` builds the image and runs tilemaker and the demonstration server, with
+input and output in `./data`. With the submodules fetched:
+
+    docker compose build
+
+Render an area from a file:
+
+    docker compose run --rm tilemaker --input /data/area.osm --output /data/area.mbtiles
+
+or from a pycrocosm map database, using the `PG*` variables from your shell or a `.env` file
+beside `docker-compose.yml`:
+
+    docker compose run --rm tilemaker --db --bbox -1.095,50.795,-1.085,50.8 --output /data/area.mbtiles
+
+`PGHOST` defaults to `host.docker.internal`, the machine running Docker; PostgreSQL there must
+accept connections from the Docker network.
+
+Then look at the map at http://localhost:8081/:
+
+    docker compose up server
+
+The server renders each tile from the map database as the map asks for it, running tilemaker in
+the same container. `TILEMAKER_BBOX` is where the map opens, `TABLE_PREFIX` the table set to
+read, and `TILEMAKER_PORT` the port. To serve tiles rendered earlier instead:
+
+    docker compose run --rm --service-ports server --input /data/area.mbtiles --static /usr/src/app/static --port 8081
+
+The build compiles 4 files at once; set `BUILD_JOBS` to change it.
+
 ### Docker
 
 Build from the project root directory, with the submodules fetched:
@@ -49,7 +80,7 @@ The container can be run like this:
 
 The tilemaker-server can be run like this:
 
-    docker run -it --rm -v $(pwd):/data -p 8080:8080 --entrypoint /usr/src/app/tilemaker-server tilemaker-core /data/area.mbtiles
+    docker run -it --rm -v $(pwd):/data -p 8081:8081 --entrypoint /usr/src/app/tilemaker-server tilemaker-core /data/area.mbtiles
 
 Map the volume your input files are in to a path within the container, as in the example
 above. To read a map database from the container, give `--db` a connection string with a host

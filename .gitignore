@@ -25,3 +25,9 @@ src/config_schema.h
 coastline
 landcover
 /test.*
+
+# docker compose input and output
+/data/
+
+# Database settings for docker compose
+.env

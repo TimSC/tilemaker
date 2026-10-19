@@ -36,6 +36,10 @@ namespace OptionsParser {
 		std::string outputFile;
 		std::string bbox;
 
+		// --tile: render just this tile
+		bool hasTile = false;
+		unsigned tileZoom = 0, tileX = 0, tileY = 0;
+
 		OsmOptions osm;
 		bool showHelp = false;
 		bool quiet = false;

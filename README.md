@@ -31,7 +31,9 @@ Then, to look at your tiles with the demonstration server:
     cd server
     ../build/tilemaker-server ../area.mbtiles
 
-and open http://localhost:8080/ in a browser.
+and open http://localhost:8081/ in a browser. The server can also render each tile from the map database as the map asks for it (`--render`; see [RUNNING.md](docs/RUNNING.md)).
+
+Or do all of this with Docker Compose: see [INSTALL.md](docs/INSTALL.md).
 
 Read about the options in [RUNNING.md](docs/RUNNING.md).
 

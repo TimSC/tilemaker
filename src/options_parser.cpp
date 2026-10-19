@@ -23,6 +23,7 @@ po::options_description getParser(OptionsParser::Options& options) {
 		("output", po::value< string >(&options.outputFile),                             "target directory or .mbtiles/.pmtiles file")
 		("db",     po::value< string >(&options.dbConnection)->implicit_value(""),       "read from the pycrocosm map database, as a libpq connection string; alone, the PG* environment variables are used (keep the password in PGPASSWORD or ~/.pgpass)")
 		("table-prefix", po::value< string >(&options.tablePrefix)->default_value("pycrocosm_mod_"), "map database table set to read (pgmap's dbtablemodifyprefix)")
+		("tile",   po::value< string >(),                                                 "render just this tile, as z/x/y (the area read is the tile and a margin around it)")
 		("bbox",   po::value< string >(&options.bbox),                                   "area to render (needed with --db, or if the input does not give its bounds), example: minlon,minlat,maxlon,maxlat")
 		("merge"  ,po::bool_switch(&options.mergeSqlite),                                "merge with existing .mbtiles (overwrites otherwise)")
 		("config", po::value< string >(&options.jsonFile)->default_value("config.json"), "config JSON file")
@@ -58,6 +59,8 @@ OptionsParser::Options OptionsParser::parse(const int argc, const char* argv[]) 
 		po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
 	} catch (const po::unknown_option& ex) {
 		throw OptionException{"Unknown option: " + ex.get_option_name()};
+	} catch (const po::error& ex) {
+		throw OptionException{ex.what()};
 	}
 	po::notify(vm);
 
@@ -65,9 +68,19 @@ OptionsParser::Options OptionsParser::parse(const int argc, const char* argv[]) 
 		options.showHelp = true;
 		return options;
 	}
+	if (vm.count("tile")) {
+		const std::string tile = vm["tile"].as<std::string>();
+		char end;
+		if (sscanf(tile.c_str(), "%u/%u/%u%c", &options.tileZoom, &options.tileX, &options.tileY, &end) != 3 ||
+		    options.tileZoom > 22 || options.tileX >= (1u << options.tileZoom) || options.tileY >= (1u << options.tileZoom)) {
+			throw OptionException{ "--tile should be z/x/y, such as 14/8142/5499" };
+		}
+		options.hasTile = true;
+	}
+
 	options.useDatabase = vm.count("db") > 0;
-	if (options.useDatabase && options.bbox.empty()) {
-		throw OptionException{ "--db needs a --bbox." };
+	if (options.useDatabase && options.bbox.empty() && !options.hasTile) {
+		throw OptionException{ "--db needs a --bbox or a --tile." };
 	}
 	if (vm.count("output") == 0) {
 		throw OptionException{ "You must specify an output file or directory. Run with --help to find out more." };
