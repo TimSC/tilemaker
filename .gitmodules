@@ -1,0 +1,3 @@
+[submodule "cppo5m"]
+	path = cppo5m
+	url = git@github.com:TimSC/cppo5m.git

@@ -6,60 +6,12 @@
 #include <unordered_map>
 
 #include <ciso646>
-#include "node_store.h"
-#include "way_store.h"
 
 using namespace std;
 namespace bg = boost::geometry;
 
 static inline bool isClosed(const std::vector<LatpLon>& way) {
 	return !way.empty() && way.front() == way.back();
-}
-
-UsedObjects::UsedObjects(Status status): status(status), mutex(256), ids(256 * 1024) {
-}
-
-bool UsedObjects::test(NodeID id) {
-	if (status == Status::Disabled)
-		return true;
-
-	const size_t chunk = id / 65536;
-	if (ids[chunk].size() == 0)
-		return false;
-
-	return ids[chunk][id % 65536];
-}
-
-void UsedObjects::enable() {
-	status = Status::Enabled;
-	if (ids.empty())
-		ids.resize(256 * 1024);
-}
-
-bool UsedObjects::enabled() const {
-	return status == Status::Enabled;
-}
-
-void UsedObjects::set(NodeID id) {
-	const size_t chunk = id / 65536;
-
-	std::lock_guard<std::mutex> lock(mutex[chunk % mutex.size()]);
-	if (ids[chunk].size() == 0)
-		ids[chunk].resize(65536);
-
-	ids[chunk][id % 65536] = true;
-}
-
-void UsedObjects::clear() {
-	// This data is not needed after PbfProcessor's ReadPhase::Nodes has completed,
-	// and it takes up to ~1.5GB of RAM.
-	std::vector<std::vector<bool>>().swap(ids);
-}
-
-void OSMStore::open(std::string const &osm_store_filename)
-{
-	void_mmap_allocator::openMmapFile(osm_store_filename);
-	reopen();
 }
 
 MultiPolygon OSMStore::wayListMultiPolygon(WayVec::const_iterator outerBegin, WayVec::const_iterator outerEnd, WayVec::const_iterator innerBegin, WayVec::const_iterator innerEnd) const {
@@ -228,24 +180,10 @@ void OSMStore::mergeMultiPolygonWays(std::vector<LatpLonDeque> &results, std::ma
 
 
 void OSMStore::reportSize() const {
-	std::cout << "Stored " << nodes.size() << " nodes, " << ways.size() << " ways, " << relations.size() << " relations" << std::endl;
-}
-
-void OSMStore::reopen() {
-	nodes.reopen();
-	ways.reopen();
-	relations.reopen();
-}
-
-void OSMStore::ensureUsedWaysInited() {
-	if (!used_ways.inited) used_ways.reserve(use_compact_nodes, nodes.size());
+	std::cout << "Stored " << nodes.size() << " nodes, " << ways.size() << " ways" << std::endl;
 }
 
 void OSMStore::clear() {
 	nodes.clear();
 	ways.clear();
-	relations.clear();
-	used_ways.clear();
-} 
-
-
+}

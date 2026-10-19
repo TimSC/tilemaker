@@ -57,6 +57,17 @@ endif()
 
 find_package(libshp REQUIRED)
 
+find_package(PostgreSQL REQUIRED)
+
+# cppo5m reads the OSM input. By default it is built from the submodule; set
+# CPPO5M_SOURCE_DIR to another tree, or to empty to use an installed one.
+set(CPPO5M_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cppo5m" CACHE PATH "cppo5m source tree to build with")
+if(CPPO5M_SOURCE_DIR AND EXISTS "${CPPO5M_SOURCE_DIR}/CMakeLists.txt")
+	add_subdirectory("${CPPO5M_SOURCE_DIR}" cppo5m EXCLUDE_FROM_ALL)
+else()
+	find_package(cppo5m REQUIRED)
+endif()
+
 find_package(Rapidjson REQUIRED)
 
 find_package(Lua)
@@ -137,9 +148,6 @@ file(GLOB tilemaker_src_files
 	src/coordinates.cpp
 	src/coordinates_geom.cpp
 	src/declutter.cpp
-	src/external/streamvbyte_decode.c
-	src/external/streamvbyte_encode.c
-	src/external/streamvbyte_zigzag.c
 	src/external/libdeflate/lib/adler32.c
 	src/external/libdeflate/lib/arm/cpu_features.c
 	src/external/libdeflate/lib/crc32.c
@@ -155,27 +163,22 @@ file(GLOB tilemaker_src_files
 	src/geom.cpp
 	src/helpers.cpp
 	src/mbtiles.cpp
-	src/mmap_allocator.cpp
-	src/node_stores.cpp
 	src/options_parser.cpp
 	src/osm_lua_processing.cpp
+	src/osm_area_processor.cpp
+	src/osm_db_reader.cpp
 	src/osm_mem_tiles.cpp
+	src/osm_reader.cpp
 	src/osm_store.cpp
 	src/output_object.cpp
-	src/pbf_processor.cpp
-	src/pbf_reader.cpp
 	src/pmtiles.cpp
 	src/pooled_string.cpp
 	src/relation_roles.cpp
-	src/sharded_node_store.cpp
-	src/sharded_way_store.cpp
 	src/shared_data.cpp
 	src/shp_mem_tiles.cpp
 	src/shp_processor.cpp
 	src/significant_tags.cpp
 	src/simplify_buildings.cpp
-	src/sorted_node_store.cpp
-	src/sorted_way_store.cpp
 	src/tag_map.cpp
 	src/tile_coordinates_set.cpp
 	src/tile_data.cpp
@@ -183,7 +186,6 @@ file(GLOB tilemaker_src_files
 	src/tilemaker.cpp
 	src/tile_worker.cpp
 	src/visvalingam.cpp
-	src/way_stores.cpp
   )
 add_executable(tilemaker ${tilemaker_src_files})
 target_include_directories(tilemaker PRIVATE include)
@@ -194,6 +196,8 @@ target_link_libraries(tilemaker
 		shapelib::shp
 		SQLite::SQLite3
 		Rapidjson::rapidjson
+		cppo5m::cppo5m
+		PostgreSQL::PostgreSQL
 		Boost::filesystem Boost::program_options)
 if(BOOST_HAS_SYSTEM)
 	target_link_libraries(tilemaker Boost::system)
@@ -210,6 +214,7 @@ endif()
 
 install(FILES docs/man/tilemaker.1 DESTINATION share/man/man1)
 
+# A demonstration server for the tiles, with a map page (server/static)
 add_executable(tilemaker-server server/server.cpp)
 target_include_directories(tilemaker-server PRIVATE include)
 target_link_libraries(tilemaker-server ${THREAD_LIB} ${CMAKE_DL_LIBS} SQLite::SQLite3 Boost::filesystem Boost::program_options)
@@ -218,3 +223,38 @@ if(BOOST_HAS_THROW_EXCEPTION)
 endif()
 
 install(TARGETS tilemaker tilemaker-server RUNTIME DESTINATION bin)
+
+# ******* Tests *******
+# Each test builds with just the sources it needs; run them with ctest.
+
+option(TILEMAKER_BUILD_TESTS "Build the tests" ON)
+if(TILEMAKER_BUILD_TESTS)
+	enable_testing()
+	set(libdeflate_src_files ${tilemaker_src_files})
+	list(FILTER libdeflate_src_files INCLUDE REGEX "libdeflate")
+
+	function(tilemaker_test name)
+		add_executable(test_${name} test/${name}.test.cpp ${ARGN})
+		target_include_directories(test_${name} PRIVATE include ${CMAKE_BINARY_DIR})
+		target_link_libraries(test_${name} ${THREAD_LIB} Rapidjson::rapidjson Boost::filesystem Boost::program_options)
+		if(BOOST_HAS_SYSTEM)
+			target_link_libraries(test_${name} Boost::system)
+		endif()
+		# Some tests read files relative to the source tree, such as config.json
+		add_test(NAME ${name} COMMAND test_${name} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+	endfunction()
+
+	tilemaker_test(append_vector)
+	tilemaker_test(attribute_store src/attribute_store.cpp src/pooled_string.cpp)
+	tilemaker_test(config_validator src/config_validator.cpp)
+	tilemaker_test(deque_map)
+	tilemaker_test(helpers src/helpers.cpp ${libdeflate_src_files})
+	tilemaker_test(options_parser src/options_parser.cpp)
+	tilemaker_test(osm_reader src/osm_reader.cpp)
+	target_link_libraries(test_osm_reader cppo5m::cppo5m)
+	tilemaker_test(osm_store src/osm_store.cpp src/coordinates.cpp src/relation_roles.cpp)
+	tilemaker_test(pooled_string src/pooled_string.cpp)
+	tilemaker_test(relation_roles src/relation_roles.cpp)
+	tilemaker_test(significant_tags src/significant_tags.cpp src/tag_map.cpp)
+	tilemaker_test(tile_coordinates_set src/tile_coordinates_set.cpp)
+endif()

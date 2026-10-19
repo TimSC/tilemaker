@@ -10,7 +10,7 @@ Vector tiles are the modern way of rendering maps. Rather than sending a finishe
 - Smooth rendering at intermediate zoom levels
 - Rotated or perspective rendering
 
-To create the vector tiles, you need software capable of reading OpenStreetMap data (in .pbf format), and slicing it up into vector tiles. This is where tilemaker comes in.
+To create the vector tiles, you need software capable of reading OpenStreetMap data and slicing it up into vector tiles. This is where tilemaker comes in.
 
 ## The format
 
@@ -22,7 +22,7 @@ Often, rather than writing thousands of individual .mvt files, you'll store them
 
 ## Source data
 
-You'll mostly use OpenStreetMap's openly-licensed map data to make your vector tiles. You get OSM data in a .pbf-format dump, rather than pulling it from an API. Several sites, such as [Geofabrik](https://download.geofabrik.de) and [BBBike](https://extract.bbbike.org), provide free country/city extracts of OSM data. (You can also download a dump of the whole planet [directly from OSM](https://planet.osm.org), but this is a massive file which is probably too much for tilemaker to process.)
+You'll mostly use OpenStreetMap's openly-licensed map data to make your vector tiles. tilemaker-core renders a small area at a time, so it takes the data of just that area: a map query from an API, or the tables of a pycrocosm map database.
 
 You might use other openly-licensed sources for coastlines and small-scale landuse. Tilemaker can read such data in shapefile format.
 

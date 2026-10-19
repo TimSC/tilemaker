@@ -15,6 +15,11 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     libboost-system-dev \
     luarocks \
     rapidjson-dev \
+    libexpat1-dev \
+    zlib1g-dev \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libpq-dev \
     cmake && \
     rm -rf /var/lib/apt/lists/* && \
     luarocks install luaflock
@@ -26,6 +31,7 @@ COPY VERSION ./
 COPY cmake ./cmake
 COPY src ./src
 COPY include ./include
+COPY cppo5m ./cppo5m
 COPY server ./server
 COPY resources/config-schema.json ./resources/config-schema.json
 
@@ -36,9 +42,9 @@ RUN mkdir build && \
         tm_version_arg="-DTM_VERSION=$TILEMAKER_BUILD_VERSION"; \
     fi && \
     if [ -z "$BUILD_DEBUG" ]; then \
-        cmake -DCMAKE_BUILD_TYPE=Release -DBoost_USE_DEBUG_RUNTIME=OFF $tm_version_arg ..; \
+        cmake -DCMAKE_BUILD_TYPE=Release -DBoost_USE_DEBUG_RUNTIME=OFF -DTILEMAKER_BUILD_TESTS=OFF $tm_version_arg ..; \
     else \
-        cmake -DCMAKE_BUILD_TYPE=Debug $tm_version_arg ..; \
+        cmake -DCMAKE_BUILD_TYPE=Debug -DTILEMAKER_BUILD_TESTS=OFF $tm_version_arg ..; \
     fi; \
     cmake --build . --parallel $(nproc) && \
     if [ -z "$BUILD_DEBUG" ]; then \
@@ -60,7 +66,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     libsqlite3-0 \
     lua-sql-sqlite3 \
     libboost-filesystem1.74.0 \
-    libboost-program-options1.74.0 && \
+    libboost-program-options1.74.0 \
+    libexpat1 \
+    libprotobuf32 \
+    libpq5 && \
     if [ -n "$BUILD_DEBUG" ]; then \
         DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gdb; \
     fi; \

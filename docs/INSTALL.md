@@ -1,76 +1,56 @@
-# Installing tilemaker
+# Installing tilemaker-core
 
-### macOS
+tilemaker-core reads its input with [cppo5m](https://github.com/TimSC/cppo5m), a git
+submodule. Clone with submodules, or fetch them afterwards:
 
-Install all dependencies with Homebrew:
-
-    brew install boost lua shapelib rapidjson
-
-Then:
-
-    make
-    sudo make install
-
-(System Integrity Protection on macOS prevents the manpages being installed. This isn't important: ignore the two lines saying "Operation not permitted".)
+    git submodule update --init --recursive
 
 ### Ubuntu and Debian
 
-Start with:
+Install the dependencies:
 
-    sudo apt install build-essential libboost-dev libboost-filesystem-dev libboost-program-options-dev libboost-system-dev lua5.3 liblua5.3-dev libshp-dev libsqlite3-dev rapidjson-dev
+    sudo apt install build-essential cmake liblua5.1-0-dev libsqlite3-dev libshp-dev \
+      libboost-program-options-dev libboost-filesystem-dev libboost-system-dev \
+      rapidjson-dev libexpat1-dev zlib1g-dev libprotobuf-dev protobuf-compiler libpq-dev
 
-Once you've installed those, then `cd` back to your Tilemaker directory and simply:
+LuaJIT can be used instead of Lua: install `libluajit-5.1-dev` and it is found if Lua is not.
 
-    make
-    sudo make install
+### Building
 
-If it fails, check that the LIB and INC lines in the Makefile correspond with your system, then try again. The above lines install Lua 5.3, but you can also choose any newer version.
+tilemaker-core builds with CMake:
 
-### Fedora
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build --parallel
+    sudo cmake --install build
 
-Start with:
+Run the tests with:
 
-    dnf install lua-devel luajit-devel sqlite-devel shapelib-devel rapidjson-devel boost-devel
+    ctest --test-dir build
 
-then build either with lua:
+cppo5m is built from the submodule. To build with another copy, pass
+`-DCPPO5M_SOURCE_DIR=/path/to/cppo5m`; to use an installed one, pass `-DCPPO5M_SOURCE_DIR=`.
 
-    make LUA_CFLAGS="$(pkg-config --cflags lua)" LUA_LIBS="$(pkg-config --libs lua)"
-    make install
-
-or with luajit:
-
-    make LUA_CFLAGS="$(pkg-config --cflags luajit)" LUA_LIBS="$(pkg-config --libs luajit)"
-    make install
-
-### Using cmake
-
-You can optionally use cmake to build:
-
-    mkdir build
-    cd build
-    cmake ..
-    make
-    sudo make install
+Pass `-DTILEMAKER_BUILD_TESTS=OFF` to build only tilemaker.
 
 ### Docker
 
-**The Dockerfile is not formally supported by project maintainers and you are encouraged to send pull requests to fix any issues you encounter.**
+Build from the project root directory, with the submodules fetched:
 
-Build from project root directory with:
+    docker build . -t tilemaker-core
 
-    docker build . -t tilemaker
+It can also be built with a `BUILD_DEBUG` build argument, which will build the executable for
+Debug, and not strip out symbols. `gdb` will also be installed to facilitate debugging:
 
-It can also be build with a `BUILD_DEBUG` build argument, which will build the executables for Debug, and not strip out symbols. `gdb` will also
-installed to facilate debugging:
+    docker build . --build-arg BUILD_DEBUG=1 -t tilemaker-core
 
-    docker build . --build-arg BUILD_DEBUG=1 -t tilemaker
+The container can be run like this:
 
-The docker container can be run like this:
-
-    docker run -it --rm -v $(pwd):/data tilemaker /data/monaco-latest.osm.pbf --output /data/monaco-latest.pmtiles
+    docker run -it --rm -v $(pwd):/data tilemaker-core --input /data/area.osm --output /data/area.pmtiles
 
 The tilemaker-server can be run like this:
 
-    docker run -it --rm -v $(pwd):/data --entrypoint /usr/src/app/tilemaker-server tilemaker --help
+    docker run -it --rm -v $(pwd):/data -p 8080:8080 --entrypoint /usr/src/app/tilemaker-server tilemaker-core /data/area.mbtiles
 
-Keep in mind to map the volume your .osm.pbf files are in to a path within your docker container, as seen in the example above. 
+Map the volume your input files are in to a path within the container, as in the example
+above. To read a map database from the container, give `--db` a connection string with a host
+the container can reach.

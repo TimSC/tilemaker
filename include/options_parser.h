@@ -22,18 +22,14 @@ namespace OptionsParser {
 	enum class OutputMode: char { File = 0, MBTiles = 1, PMTiles = 2 };
 
 	struct OsmOptions {
-		std::string storeFile;
-		bool fast = false;
-		bool compact = false;
 		bool skipIntegrity = false;
-		bool uncompressedNodes = false;
-		bool uncompressedWays = false;
-		bool materializeGeometries = false;
-		bool shardStores = false;
 	};
 
 	struct Options {
 		std::vector<std::string> inputFiles;
+		bool useDatabase = false;
+		std::string dbConnection;
+		std::string tablePrefix;
 		std::string luaFile;
 		std::string jsonFile;
 		uint32_t threadNum = 0;

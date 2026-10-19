@@ -8,7 +8,7 @@
 #include <memory>
 #include "append_vector.h"
 #include "clip_cache.h"
-#include "mmap_allocator.h"
+#include <memory>
 #include "tile_coordinates_set.h"
 #include "tile_data_base.h"
 
@@ -32,37 +32,21 @@ template<typename OO> void finalizeObjects(
 	typename std::vector<std::vector<OO>>& lowZoom
 	) {
 	size_t z6OffsetDivisor = indexZoom >= CLUSTER_ZOOM ? (1 << (indexZoom - CLUSTER_ZOOM)) : 1;
-#ifdef CLOCK_MONOTONIC
-	timespec startTs, endTs;
-	clock_gettime(CLOCK_MONOTONIC, &startTs);
-#endif
 
 	int i = -1;
 	for (auto it = begin; it != end; it++) {
 		i++;
-		if (it->size() > 0 || i % 50 == 0 || i == 4095) {
-			std::cout << "\r" << name << ": finalizing z6 tile " << (i + 1) << "/" << CLUSTER_ZOOM_AREA;
-
-#ifdef CLOCK_MONOTONIC
-			clock_gettime(CLOCK_MONOTONIC, &endTs);
-			uint64_t elapsedNs = 1e9 * (endTs.tv_sec - startTs.tv_sec) + endTs.tv_nsec - startTs.tv_nsec;
-			std::cout << " (" << std::to_string((uint32_t)(elapsedNs / 1e6)) << " ms)";
-#endif
-			std::cout << std::flush;
-		}
 		if (it->size() == 0)
 			continue;
 
-		// We track a separate copy of low zoom objects to avoid scanning large
-		// lists of objects that may be on slow disk storage.
+		// A separate copy of the low zoom objects, so they can be found without
+		// scanning every object
 		for (auto objectIt = it->begin(); objectIt != it->end(); objectIt++)
 			if (objectIt->oo.minZoom < CLUSTER_ZOOM)
 				lowZoom[i].push_back(*objectIt);
 
 		sortOutputObjects<OO>(indexZoom, threadNum, it->begin(), it->end());
 	}
-
-	std::cout << std::endl;
 }
 
 template<typename OO> void collectTilesWithObjectsAtZoomTemplate(
@@ -247,14 +231,14 @@ public:
 	// Store for generated geometries
 	using point_store_t = std::vector<Point>;
 
-	using linestring_t = boost::geometry::model::linestring<Point, std::vector, mmap_allocator>;
+	using linestring_t = boost::geometry::model::linestring<Point>;
 	using linestring_store_t = std::vector<linestring_t>;
 
-	using multi_linestring_t = boost::geometry::model::multi_linestring<linestring_t, std::vector, mmap_allocator>;
+	using multi_linestring_t = boost::geometry::model::multi_linestring<linestring_t>;
 	using multi_linestring_store_t = std::vector<multi_linestring_t>;
 
-	using polygon_t = boost::geometry::model::polygon<Point, true, true, std::vector, std::vector, mmap_allocator, mmap_allocator>;
-	using multi_polygon_t = boost::geometry::model::multi_polygon<polygon_t, std::vector, mmap_allocator>;
+	using polygon_t = boost::geometry::model::polygon<Point, true, true>;
+	using multi_polygon_t = boost::geometry::model::multi_polygon<polygon_t>;
 	using multi_polygon_store_t = std::vector<multi_polygon_t>;
 
 	std::mutex storeMutex;

@@ -1,7 +1,7 @@
 #ifndef _APPEND_VECTOR_H
 #define _APPEND_VECTOR_H
 
-#include "mmap_allocator.h"
+#include <memory>
 #include <vector>
 #include <queue>
 #include <cstdint>
@@ -148,7 +148,7 @@ namespace AppendVectorNS {
 		void clear() {
 			count = 0;
 			vecs.clear();
-			vecs.push_back(std::vector<T, mmap_allocator<T>>());
+			vecs.push_back(std::vector<T>());
 			vecs.back().reserve(APPEND_VECTOR_SIZE);
 		}
 
@@ -177,7 +177,7 @@ namespace AppendVectorNS {
 			vecs.back().push_back(el);
 
 			if (vecs.back().size() == vecs.back().capacity()) {
-				vecs.push_back(std::vector<T, mmap_allocator<T>>());
+				vecs.push_back(std::vector<T>());
 				vecs.back().reserve(APPEND_VECTOR_SIZE);
 			}
 
@@ -185,7 +185,7 @@ namespace AppendVectorNS {
 		}
 
 		size_t count;
-		std::deque<std::vector<T, mmap_allocator<T>>> vecs;
+		std::deque<std::vector<T>> vecs;
 	};
 }
 

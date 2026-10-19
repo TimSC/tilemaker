@@ -35,8 +35,6 @@
 #endif
 
 #include "geom.h"
-#include "node_stores.h"
-#include "way_stores.h"
 
 // Tilemaker code
 #include "config_validator.h"
@@ -52,7 +50,8 @@
 
 #include "options_parser.h"
 #include "shared_data.h"
-#include "pbf_processor.h"
+#include "osm_area.h"
+#include "osm_area_processor.h"
 #include "geojson_processor.h"
 #include "shp_processor.h"
 #include "tile_worker.h"
@@ -75,6 +74,10 @@ namespace geom = boost::geometry;
 
 // Global verbose switch
 bool verbose = false;
+
+// The lowest zoom rendered. An area's data is only enough for tiles inside it,
+// and lower zooms would need far larger areas than the input is meant to hold.
+const unsigned int MIN_ZOOM = 11;
 
 void sortTileCoordinates(
     const size_t baseZoom,
@@ -112,10 +115,9 @@ int main(const int argc, const char* argv[]) {
 
 	// ---- Remove existing .mbtiles if it exists
 	if ((options.outputMode == OptionsParser::OutputMode::MBTiles || options.outputMode == OptionsParser::OutputMode::PMTiles) && !options.mergeSqlite && static_cast<bool>(std::ifstream(options.outputFile))) {
-		cout << "Output file exists, will overwrite (Ctrl-C to abort";
-		if (options.outputMode == OptionsParser::OutputMode::MBTiles) cout << ", rerun with --merge to keep";
-		cout << ")" << endl;
-		std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+		cout << "Output file exists, overwriting";
+		if (options.outputMode == OptionsParser::OutputMode::MBTiles) cout << " (use --merge to keep it)";
+		cout << endl;
 		if (remove(options.outputFile.c_str()) != 0) {
 			cerr << "Couldn't remove existing file" << endl;
 			return 0;
@@ -129,35 +131,58 @@ int main(const int argc, const char* argv[]) {
 	}
 
 
-	// ----	Read bounding box from first .pbf (if there is one)
+	// ----	Read the OSM data of the area
+
+	OsmArea osmArea;
+	for (const auto& inputFile : options.inputFiles) {
+		cout << "Reading " << inputFile << endl;
+		try {
+			ReadOsmFile(inputFile, osmArea);
+		} catch (const std::exception& e) {
+			cerr << e.what() << endl;
+			return -1;
+		}
+	}
+	if (options.useDatabase) {
+		vector<string> box = parseBox(options.bbox);
+		cout << "Reading the map database" << endl;
+		try {
+			ReadOsmDatabase(options.dbConnection, options.tablePrefix,
+				bboxElementFromStr(box.at(0)), bboxElementFromStr(box.at(1)),
+				bboxElementFromStr(box.at(2)), bboxElementFromStr(box.at(3)), osmArea);
+		} catch (const std::exception& e) {
+			cerr << e.what() << endl;
+			return -1;
+		}
+	}
+	cout << "Read " << osmArea.nodes.size() << " nodes, " << osmArea.ways.size() << " ways, " << osmArea.relations.size() << " relations" << endl;
+
+	// ----	The area's bounds: --bbox, or those the input gives, or those of its nodes
 
 	bool hasClippingBox = false;
 	Box clippingBox;
-	double minLon=std::numeric_limits<double>::max(),
-				 maxLon=std::numeric_limits<double>::min(),
-				 minLat=std::numeric_limits<double>::max(),
-				 maxLat=std::numeric_limits<double>::min();
+	double minLon = 0.0, maxLon = 0.0, minLat = 0.0, maxLat = 0.0;
 	if (!bboxElements.empty()) {
 		hasClippingBox = true;
 		minLon = bboxElementFromStr(bboxElements.at(0));
 		minLat = bboxElementFromStr(bboxElements.at(1));
 		maxLon = bboxElementFromStr(bboxElements.at(2));
 		maxLat = bboxElementFromStr(bboxElements.at(3));
-
-	} else if (options.inputFiles.size()>0) {
-		for (const auto inputFile : options.inputFiles) {
-			bool localHasClippingBox;
-			double localMinLon, localMaxLon, localMinLat, localMaxLat;
-			int ret = ReadPbfBoundingBox(inputFile, localMinLon, localMaxLon, localMinLat, localMaxLat, localHasClippingBox);
-			if(ret != 0) return ret;
-			hasClippingBox = hasClippingBox || localHasClippingBox;
-
-			if (localHasClippingBox) {
-				minLon = std::min(minLon, localMinLon);
-				maxLon = std::max(maxLon, localMaxLon);
-				minLat = std::min(minLat, localMinLat);
-				maxLat = std::max(maxLat, localMaxLat);
-			}
+	} else if (osmArea.hasBounds) {
+		hasClippingBox = true;
+		minLon = osmArea.minLon;
+		minLat = osmArea.minLat;
+		maxLon = osmArea.maxLon;
+		maxLat = osmArea.maxLat;
+	} else if (!osmArea.nodes.empty()) {
+		hasClippingBox = true;
+		minLon = maxLon = osmArea.nodes.front().lon;
+		minLat = maxLat = osmArea.nodes.front().lat;
+		for (const auto& node : osmArea.nodes) {
+			minLon = std::min(minLon, node.lon);
+			maxLon = std::max(maxLon, node.lon);
+			minLat = std::min(minLat, node.lat);
+			maxLat = std::max(maxLat, node.lat);
 		}
 	}
 
@@ -192,70 +217,21 @@ int main(const int argc, const char* argv[]) {
 		cerr << "Couldn't find expected details in JSON file." << endl;
 		return -1;
 	}
+	if (config.endZoom < MIN_ZOOM) {
+		cerr << "maxzoom must be at least " << MIN_ZOOM << endl;
+		return -1;
+	}
+	if (config.startZoom < MIN_ZOOM) {
+		cout << "Rendering from z" << MIN_ZOOM << " (config minzoom is " << config.startZoom << ")" << endl;
+		config.startZoom = MIN_ZOOM;
+	}
 	if (hasClippingBox) {
 		cout << "Bounding box " << clippingBox.min_corner().x() << ", " << latp2lat(clippingBox.min_corner().y()) << ", " << 
 		                           clippingBox.max_corner().x() << ", " << latp2lat(clippingBox.max_corner().y()) << endl;
 	}
 
-	// For each tile, objects to be used in processing
-	bool allPbfsHaveSortTypeThenID = true;
-	bool anyPbfHasLocationsOnWays = false;
-
-	for (const std::string& file: options.inputFiles) {
-		if (ends_with(file, ".pbf")) {
-			allPbfsHaveSortTypeThenID = allPbfsHaveSortTypeThenID && PbfHasOptionalFeature(file, OptionSortTypeThenID);
-			anyPbfHasLocationsOnWays = anyPbfHasLocationsOnWays || PbfHasOptionalFeature(file, OptionLocationsOnWays);
-		}
-	}
-
-	auto createNodeStore = [allPbfsHaveSortTypeThenID, options]() {
-		if (options.osm.compact) {
-			std::shared_ptr<NodeStore> rv = make_shared<CompactNodeStore>();
-			return rv;
-		}
-
-		if (options.inputFiles.size() == 1 && allPbfsHaveSortTypeThenID) {
-			std::shared_ptr<NodeStore> rv = make_shared<SortedNodeStore>(!options.osm.uncompressedNodes);
-			return rv;
-		}
-		std::shared_ptr<NodeStore> rv =  make_shared<BinarySearchNodeStore>();
-		return rv;
-	};
-
-	shared_ptr<NodeStore> nodeStore;
-
-	// CompactNodeStore is a dense datatype; it doesn't make sense to allocate
-	// more than one of them.
-	if (options.osm.shardStores && !options.osm.compact) {
-		nodeStore = std::make_shared<ShardedNodeStore>(createNodeStore);
-	} else {
-		nodeStore = createNodeStore();
-	}
-
-	auto createWayStore = [anyPbfHasLocationsOnWays, allPbfsHaveSortTypeThenID, options, &nodeStore]() {
-		if (options.inputFiles.size() == 1 && !anyPbfHasLocationsOnWays && allPbfsHaveSortTypeThenID) {
-			std::shared_ptr<WayStore> rv = make_shared<SortedWayStore>(!options.osm.uncompressedWays, *nodeStore.get());
-			return rv;
-		}
-
-		std::shared_ptr<WayStore> rv = make_shared<BinarySearchWayStore>();
-		return rv;
-	};
-
-	shared_ptr<WayStore> wayStore;
-	if (options.osm.shardStores) {
-		wayStore = std::make_shared<ShardedWayStore>(createWayStore, *nodeStore.get());
-	} else {
-		wayStore = createWayStore();
-	}
-
-	OSMStore osmStore(*nodeStore.get(), *wayStore.get());
-	osmStore.use_compact_store(options.osm.compact);
+	OSMStore osmStore;
 	osmStore.enforce_integrity(!options.osm.skipIntegrity);
-	if(!options.osm.storeFile.empty()) {
-		std::cout << "Using osm store file: " << options.osm.storeFile << std::endl;
-		osmStore.open(options.osm.storeFile);
-	}
 
 	AttributeStore attributeStore;
 
@@ -265,13 +241,13 @@ int main(const int argc, const char* argv[]) {
 	declutter.configure(layers.layers);
 
 	const unsigned int indexZoom = std::min(config.baseZoom, 14u);
-	class OsmMemTiles osmMemTiles(options.threadNum, indexZoom, config.includeID, *nodeStore, *wayStore);
+	class OsmMemTiles osmMemTiles(options.threadNum, indexZoom, config.includeID);
 	class ShpMemTiles shpMemTiles(options.threadNum, indexZoom, declutter);
 	osmMemTiles.open();
 	shpMemTiles.open();
 
 	OsmLuaProcessing osmLuaProcessing(osmStore, config, layers, options.luaFile, 
-		shpMemTiles, osmMemTiles, attributeStore, declutter, options.osm.materializeGeometries, true);
+		shpMemTiles, osmMemTiles, attributeStore, declutter);
 
 	// ---- Load external sources (shp/geojson)
 
@@ -312,42 +288,12 @@ int main(const int argc, const char* argv[]) {
 	const SignificantTags significantNodeTags = osmLuaProcessing.GetSignificantNodeKeys();
 	const SignificantTags significantWayTags = osmLuaProcessing.GetSignificantWayKeys();
 
-	// ----	Read all PBFs
-	
-	PbfProcessor pbfProcessor(osmStore);
-	std::vector<bool> sortOrders = layers.getSortOrders();
+	// ----	Run the OSM data through the Lua profile
 
-	for (auto inputFile : options.inputFiles) {
-		cout << "Reading .pbf " << inputFile << endl;
-		ifstream infile(inputFile, ios::in | ios::binary);
-		if (!infile) { cerr << "Couldn't open .pbf file " << inputFile << endl; return -1; }
-		
-		const bool hasSortTypeThenID = PbfHasOptionalFeature(inputFile, OptionSortTypeThenID);
-		int ret = pbfProcessor.ReadPbfFile(
-			nodeStore->shards(),
-			hasSortTypeThenID,
-			significantNodeTags,
-			significantWayTags,
-			options.threadNum,
-			[&]() {
-				thread_local std::pair<std::string, std::shared_ptr<ifstream>> pbfStream;
-				if (pbfStream.first != inputFile) {
-					pbfStream = std::make_pair(inputFile, std::make_shared<ifstream>(inputFile, ios::in | ios::binary));
-				}
-				return pbfStream.second;
-			},
-			[&]() {
-				thread_local std::pair<std::string, std::shared_ptr<OsmLuaProcessing>> osmLuaProcessing;
-				if (osmLuaProcessing.first != inputFile) {
-					osmLuaProcessing = std::make_pair(inputFile, std::make_shared<OsmLuaProcessing>(osmStore, config, layers, options.luaFile, shpMemTiles, osmMemTiles, attributeStore, declutter, options.osm.materializeGeometries, false));
-				}
-				return osmLuaProcessing.second;
-			},
-			*nodeStore,
-			*wayStore
-		);
-		if (ret != 0) return ret;
-	} 
+	ProcessOsmArea(osmArea, osmStore, osmLuaProcessing, significantNodeTags, significantWayTags);
+	osmArea = OsmArea(); // no longer needed
+	osmStore.reportSize();
+	std::vector<bool> sortOrders = layers.getSortOrders();
 	attributeStore.finalize();
 	osmMemTiles.reportSize();
 	attributeStore.reportSize();
@@ -389,28 +335,6 @@ int main(const int argc, const char* argv[]) {
 	}
 	// tiles by zoom level
 
-	// The clipping bbox check is expensive - as an optimization, compute the set of
-	// z6 tiles that are wholly covered by the clipping box. Membership in this
-	// set is quick to test.
-	PreciseTileCoordinatesSet coveredZ6Tiles(6);
-	if (hasClippingBox) {
-		for (int x = 0; x < 1 << 6; x++) {
-			for (int y = 0; y < 1 << 6; y++) {
-				if (boost::geometry::within(
-							TileBbox(TileCoordinates(x, y), 6, false, false).getTileBox(),
-							clippingBox
-						))
-					coveredZ6Tiles.set(x, y);
-			}
-		}
-	}
-
-	// For large areas (arbitrarily defined as 100 z6 tiles), use a dense index for pmtiles
-	if (coveredZ6Tiles.size()>100 && options.outputMode == OptionsParser::OutputMode::PMTiles) {
-		std::cout << "Using dense index for .pmtiles" << std::endl;
-		sharedData.pmtiles.isSparse = false;
-	}
-
 	std::deque<std::pair<unsigned int, TileCoordinates>> tileCoordinates;
 	std::vector<std::shared_ptr<TileCoordinatesSet>> zoomResults;
 	zoomResults.reserve(sharedData.config.endZoom + 1);
@@ -449,22 +373,20 @@ int main(const int argc, const char* argv[]) {
 
 		const auto& zoomResult = zoomResults[zoom];
 		int numTiles = 0;
-		for (int x = 0; x < 1 << zoom; x++) {
-			for (int y = 0; y < 1 << zoom; y++) {
+		// Only the tiles over the area
+		uint32_t minX = 0, maxX = (1u << zoom) - 1, minY = 0, maxY = (1u << zoom) - 1;
+		if (hasClippingBox) {
+			minX = lon2tilex(clippingBox.min_corner().x(), zoom);
+			maxX = std::min(maxX, lon2tilex(clippingBox.max_corner().x(), zoom));
+			minY = latp2tiley(clippingBox.max_corner().y(), zoom);
+			maxY = std::min(maxY, latp2tiley(clippingBox.min_corner().y(), zoom));
+		}
+		for (uint32_t x = minX; x <= maxX; x++) {
+			for (uint32_t y = minY; y <= maxY; y++) {
 				if (!zoomResult->test(x, y))
 					continue;
-			
-				if (hasClippingBox) {
-					bool isInAWhollyCoveredZ6Tile = false;
-					if (zoom >= 6) {
-						TileCoordinate z6x = x / (1 << (zoom - 6));
-						TileCoordinate z6y = y / (1 << (zoom - 6));
-						isInAWhollyCoveredZ6Tile = coveredZ6Tiles.test(z6x, z6y);
-					}
-
-					if(!isInAWhollyCoveredZ6Tile && !boost::geometry::intersects(TileBbox(TileCoordinates(x, y), zoom, false, false).getTileBox(), clippingBox)) 
-						continue;
-				}
+				if (hasClippingBox && !boost::geometry::intersects(TileBbox(TileCoordinates(x, y), zoom, false, false).getTileBox(), clippingBox))
+					continue;
 
 				tileCoordinates.push_back(std::make_pair(zoom, TileCoordinates(x, y)));
 				numTiles++;

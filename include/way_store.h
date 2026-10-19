@@ -1,32 +1,32 @@
 #ifndef _WAY_STORE_H
 #define _WAY_STORE_H
 
-#include <utility>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <vector>
 #include "coordinates.h"
-#include "mmap_allocator.h"
 
-class WayStore {
+// The node locations of every way in the input that has them all (or, without
+// integrity checks, any). As NodeStore, a plain hash map filled on one thread.
+class WayStore
+{
 public:
-	using latplon_vector_t = std::vector<LatpLon, mmap_allocator<LatpLon>>;
-	using ll_element_t = std::pair<WayID, latplon_vector_t>;
+	void insert(WayID id, std::vector<LatpLon> lls) { latpLonLists[id] = std::move(lls); }
+	void clear() { latpLonLists.clear(); }
 
-	virtual void reopen() = 0;
-	// Run on each thread when a batch of blocks is started. Only
-	// meaningful for SortedWayStore
-	virtual void batchStart() = 0;
-	virtual std::vector<LatpLon> at(WayID wayid) const = 0;
-	virtual void at(WayID wayid, std::vector<LatpLon>& output) const = 0;
-	virtual bool requiresNodes() const = 0;
-	virtual void insertLatpLons(std::vector<ll_element_t>& newWays) = 0;
-	virtual void insertNodes(const std::vector<std::pair<WayID, std::vector<NodeID>>>& newWays) = 0;
-	virtual void clear() = 0;
-	virtual std::size_t size() const = 0;
-	virtual void finalize(unsigned int threadNum) = 0;
+	size_t size() const { return latpLonLists.size(); }
+	bool contains(WayID id) const { return latpLonLists.count(id) > 0; }
+	const std::vector<LatpLon>& at(WayID id) const {
+		auto it = latpLonLists.find(id);
+		if (it == latpLonLists.end())
+			throw std::out_of_range("Could not find way with id " + std::to_string(id));
+		return it->second;
+	}
+	void at(WayID id, std::vector<LatpLon>& output) const { output = at(id); }
 
-	virtual bool contains(size_t shard, WayID id) const = 0;
-	virtual WayStore& shard(size_t shard) = 0;
-	virtual const WayStore& shard(size_t shard) const = 0;
-	virtual size_t shards() const = 0;
+private:
+	std::unordered_map<WayID, std::vector<LatpLon>> latpLonLists;
 };
 
 #endif

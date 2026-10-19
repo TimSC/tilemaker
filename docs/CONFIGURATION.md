@@ -240,7 +240,7 @@ Working with other types of relations (e.g. routes) is documented in RELATIONS.m
 
 ## Shapefiles and GeoJSON
 
-Tilemaker chiefly works with OpenStreetMap .osm.pbf data, but you can also bring in external data in shapefile or GeoJSON format. This is useful for rarely-changing data such as coastlines and built-up area outlines.
+Tilemaker chiefly works with OpenStreetMap data, but you can also bring in external data in shapefile or GeoJSON format. This is useful for rarely-changing data such as coastlines and built-up area outlines.
 
 Shapefiles and GeoJSON are imported directly in your layer config like this:
 
@@ -263,7 +263,7 @@ To set the minimum zoom level at which an individual feature is rendered, use `a
 
 Similarly, to declutter shapefile/GeoJSON points, set a `_score` value in your return table and `declutter_below` on the layer.
 
-Shapefiles/GeoJSON **must** be in WGS84 projection, i.e. pure latitude/longitude. (Use ogr2ogr to reproject them if your source material is in a different projection.) They will be clipped to the bounds of the first .pbf that you import, unless you specify otherwise with a `bounding_box` setting in your JSON file.
+Shapefiles/GeoJSON **must** be in WGS84 projection, i.e. pure latitude/longitude. (Use ogr2ogr to reproject them if your source material is in a different projection.) They will be clipped to the bounds of the area being rendered, unless you specify otherwise with a `bounding_box` setting in your JSON file.
 
 ### Lua spatial queries
 

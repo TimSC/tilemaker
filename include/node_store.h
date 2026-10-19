@@ -1,33 +1,30 @@
 #ifndef _NODE_STORE_H
 #define _NODE_STORE_H
 
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
 #include "coordinates.h"
-#include <utility>
 
+// The location of every node in the input. The input covers a small area,
+// so this is a plain hash map. It is filled on one thread, then only read.
 class NodeStore
 {
 public:
-	using element_t = std::pair<NodeID, LatpLon>;
+	void insert(NodeID id, LatpLon ll) { latpLons[id] = ll; }
+	void clear() { latpLons.clear(); }
 
-	// Mutators
-	virtual void insert(const std::vector<element_t>& elements) = 0;
-	virtual void clear() = 0;
-	virtual void reopen() = 0;
-	// Run on each thread when a batch of blocks is started. Only
-	// meaningful for SortedNodeStore
-	virtual void batchStart() = 0;
+	size_t size() const { return latpLons.size(); }
+	bool contains(NodeID id) const { return latpLons.count(id) > 0; }
+	LatpLon at(NodeID id) const {
+		auto it = latpLons.find(id);
+		if (it == latpLons.end())
+			throw std::out_of_range("Could not find node with id " + std::to_string(id));
+		return it->second;
+	}
 
-	// Run on a single-thread, after all nodes have been inserted.
-	virtual void finalize(size_t threadNum) = 0;
-
-	// Accessors
-	virtual size_t size() const = 0;
-	virtual LatpLon at(NodeID i) const = 0;
-
-	virtual bool contains(size_t shard, NodeID id) const = 0;
-	virtual NodeStore& shard(size_t shard) = 0;
-	virtual const NodeStore& shard(size_t shard) const = 0;
-	virtual size_t shards() const = 0;
+private:
+	std::unordered_map<NodeID, LatpLon> latpLons;
 };
 
 #endif

@@ -22,14 +22,30 @@
 <script>
 var map;
 
-fetch("/metadata")
-	.then(response => response.json())
-	.then(data => {
-		var styleURL = window.location.protocol+'//'+window.location.host+'/style.json';
+// style.json and spec.json give this server's URLs from the root ("/spec.json"),
+// so they work on any host and port; the map needs them whole
+function fromThisServer(url) {
+	return url.startsWith('/') ? window.location.origin + url : url;
+}
+
+function getJson(url) {
+	return fetch(url).then(response => response.json());
+}
+
+Promise.all([getJson("/metadata"), getJson("/style.json"), getJson("/spec.json")])
+	.then(([data, style, spec]) => {
+		// The tile source inline, rather than by its url, so its tile URLs can be resolved too
+		var source = style.sources.openmaptiles;
+		if (source.url === '/spec.json') {
+			spec.tiles = spec.tiles.map(fromThisServer);
+			style.sources.openmaptiles = Object.assign({ type: source.type }, spec);
+		}
+		style.glyphs = fromThisServer(style.glyphs);
+
 		var bounds = data['bounds'].split(',');
 		map = new mapboxgl.Map({
 		    container: 'map', // container id
-		    style: styleURL, // stylesheet location
+		    style: style,
 		    center: [(Number(bounds[0])+Number(bounds[2]))/2,
 			         (Number(bounds[1])+Number(bounds[3]))/2], // starting position [lng, lat]
 		    zoom: 13 // starting zoom

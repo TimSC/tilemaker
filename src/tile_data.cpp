@@ -93,7 +93,7 @@ void TileDataSource::finalize(size_t threadNum) {
 		}
 	}
 
-	std::cout << "indexed " << finalized << " contended objects" << std::endl;
+	if (verbose) std::cout << name() << ": indexed " << finalized << " contended objects" << std::endl;
 
 	finalizeObjects<OutputObjectXY>(name(), threadNum, indexZoom, objects.begin(), objects.end(), lowZoomObjects);
 	finalizeObjects<OutputObjectXYID>(name(), threadNum, indexZoom, objectsWithIds.begin(), objectsWithIds.end(), lowZoomObjectsWithIds);

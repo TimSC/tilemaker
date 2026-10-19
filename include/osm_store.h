@@ -4,36 +4,19 @@
 
 #include "geom.h"
 #include "coordinates.h"
-#include "mmap_allocator.h"
+#include "node_store.h"
+#include "way_store.h"
 #include "relation_roles.h"
 
 #include <utility>
 #include <vector>
 #include <mutex>
+#include <set>
 #include <unordered_set>
 #include <boost/container/flat_map.hpp>
 #include <protozero/data_view.hpp>
 
 extern bool verbose;
-
-class NodeStore;
-class WayStore;
-
-class UsedObjects {
-public:
-	enum class Status: bool { Disabled = false, Enabled = true };
-	UsedObjects(Status status);
-	bool test(NodeID id);
-	void set(NodeID id);
-	void enable();
-	bool enabled() const;
-	void clear();
-
-private:
-	Status status;
-	std::vector<std::mutex> mutex;
-	std::vector<std::vector<bool>> ids;
-};
 
 // A comparator for data_view so it can be used in boost's flat_map
 struct DataViewLessThan {
@@ -42,56 +25,6 @@ struct DataViewLessThan {
 	}
 };
 
-
-//
-// Internal data structures.
-//
-// list of ways used by relations
-// by noting these in advance, we don't need to store all ways in the store
-class UsedWays {
-
-private:
-	std::vector<bool> usedList;
-	mutable std::mutex mutex;
-
-public:
-	bool inited = false;
-
-	// Size the vector to a reasonable estimate, to avoid resizing on the fly
-	// TODO: it'd be preferable if UsedWays didn't know about compact mode --
-	//   instead, use an efficient data structure if numNodes < 1B, otherwise
-	//   use a large bitvector
-	void reserve(bool compact, size_t numNodes) {
-		std::lock_guard<std::mutex> lock(mutex);
-		if (inited) return;
-		inited = true;
-		if (compact) {
-			// If we're running in compact mode, way count is roughly 1/9th of node count... say 1/8 to be safe
-			usedList.reserve(numNodes/8);
-		} else {
-			// Otherwise, we could have anything up to the current max node ID (approaching 2**30 in summer 2021)
-			// 2**31 is 0.25GB with a vector<bool>
-			usedList.reserve(pow(2,31));
-		}
-	}
-	
-	// Mark a way as used
-	void insert(WayID wayid) {
-		std::lock_guard<std::mutex> lock(mutex);
-		if (wayid>=usedList.size()) usedList.resize(wayid+256);
-		usedList[wayid] = true;
-	}
-	
-	// See if a way is used
-	bool at(WayID wayid) const {
-		return (wayid>=usedList.size()) ? false : usedList[wayid];
-	}
-	
-	void clear() {
-		std::lock_guard<std::mutex> lock(mutex);
-		usedList.clear();
-	}
-};
 
 // scanned relations store
 class RelationScanStore {
@@ -200,111 +133,30 @@ public:
 };
 
 
-// relation store
-// (this isn't currently used as we don't need to store relations for later processing, but may be needed for nested relations)
-
-class RelationStore {
-
-public:	
-	using wayid_vector_t = std::vector<WayID, mmap_allocator<NodeID>>;
-	using relation_entry_t = std::pair<wayid_vector_t, wayid_vector_t>;
-
-	using element_t = std::pair<WayID, relation_entry_t>;
-	using map_t = std::deque<element_t, mmap_allocator<element_t>>;
-
-	void reopen() {
-		std::lock_guard<std::mutex> lock(mutex);
-		mOutInLists = std::make_unique<map_t>();
-	}
-
-	// @brief Insert a list of relations
-	void insert_front(std::vector<element_t> &new_relations) {
-		std::lock_guard<std::mutex> lock(mutex);
-		auto i = mOutInLists->size();
-		mOutInLists->resize(i + new_relations.size());
-		std::copy(std::make_move_iterator(new_relations.begin()), std::make_move_iterator(new_relations.end()), mOutInLists->begin() + i); 
-	}
-
-	// @brief Make the store empty
-	void clear() {
-		std::lock_guard<std::mutex> lock(mutex);
-		mOutInLists->clear();
-	}
-
-	std::size_t size() const {
-		std::lock_guard<std::mutex> lock(mutex);
-		return mOutInLists->size(); 
-	}
-
-private: 	
-	mutable std::mutex mutex;
-	std::unique_ptr<map_t> mOutInLists;
-};
-
 /**
 	\brief OSM store keeps nodes, ways and relations in memory for later access
 
 	Store all of those to be output: latp/lon for nodes, node list for ways, and way list for relations.
 	It will serve as the global data store. OSM data destined for output will be set here from OsmMemTiles.
 
-	Internal data structures are encapsulated in NodeStore, WayStore and RelationStore classes.
-	These store can be altered for efficient memory use without global code changes.
-	Such data structures have to return const ForwardInputIterators (only *, ++ and == should be supported).
-
-	Possible future improvements to save memory:
-	- pack WayStore (e.g. zigzag PBF encoding and varint)
-	- combine innerWays and outerWays into one vector, with a single-byte index marking the changeover
-	- use two arrays (sorted keys and elements) instead of map
+	The input covers only the area being rendered, so everything in it is kept.
 */
 class OSMStore
 {
 public:
-	NodeStore& nodes;
-	WayStore& ways;
+	NodeStore nodes;
+	WayStore ways;
 	RelationScanStore scannedRelations;
 
-protected:	
-	bool use_compact_nodes = false;
+	// Relations accepted by relation_scan_function, which relation_function is then run on
+	std::unordered_set<RelationID> usedRelations;
+
+protected:
 	bool require_integrity = true;
 
-	RelationStore relations; // unused
-	UsedWays used_ways;
-
 public:
-	UsedObjects usedNodes;
-	UsedObjects usedRelations;
-
-	OSMStore(NodeStore& nodes, WayStore& ways):
-		nodes(nodes),
-		ways(ways),
-		// We only track usedNodes if way_keys is present; a node is used if it's
-		// a member of a way used by a used relation, or a way that meets the way_keys
-		// criteria.
-		usedNodes(UsedObjects::Status::Disabled),
-		// A relation is used only if it was previously accepted from relation_scan_function
-		usedRelations(UsedObjects::Status::Enabled)
-	{ 
-		reopen();
-	}
-
-	void reopen();
-
-	void open(std::string const &osm_store_filename);
-
-	void use_compact_store(bool use) { use_compact_nodes = use; }
-	bool isCompactStore() { return use_compact_nodes; }
 	void enforce_integrity(bool ei) { require_integrity = ei; }
 	bool integrity_enforced() { return require_integrity; }
-
-	void relations_insert_front(std::vector<RelationStore::element_t> &new_relations) {
-		relations.insert_front(new_relations);
-	}
-	void relations_sort(unsigned int threadNum);
-
-	void mark_way_used(WayID i) { used_ways.insert(i); }
-	bool way_is_used(WayID i) { return used_ways.at(i); }
-
-	void ensureUsedWaysInited();
 
 	using tag_map_t = boost::container::flat_map<std::string, std::string>;
 

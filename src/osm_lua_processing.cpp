@@ -231,9 +231,7 @@ OsmLuaProcessing::OsmLuaProcessing(
 	const class ShpMemTiles &shpMemTiles, 
 	class OsmMemTiles &osmMemTiles,
 	AttributeStore &attributeStore,
-	class Declutter &declutter,
-	bool materializeGeometries,
-	bool isFirst) :
+	class Declutter &declutter) :
 	osmStore(osmStore),
 	shpMemTiles(shpMemTiles),
 	osmMemTiles(osmMemTiles),
@@ -241,8 +239,7 @@ OsmLuaProcessing::OsmLuaProcessing(
 	declutter(declutter),
 	config(configIn),
 	currentTags(NULL),
-	layers(layers),
-	materializeGeometries(materializeGeometries) {
+	layers(layers) {
 
 	sigusr1Handler.initialize();
 	if (vectorLayerMetadataMutexes.size() <= layers.layers.size()) {
@@ -312,7 +309,9 @@ OsmLuaProcessing::OsmLuaProcessing(
 	// ---- Call init_function of Lua logic
 
 	if (!!luaState["init_function"]) {
-		luaState["init_function"](this->config.projectName, isFirst);
+		// The second argument told the first of upstream's per-thread instances
+		// apart; there is only one now
+		luaState["init_function"](this->config.projectName, true);
 	}
 }
 
@@ -656,9 +655,7 @@ void OsmLuaProcessing::Layer(const string &layerName, bool area) {
 
 			if(CorrectGeometry(p) == CorrectGeometryResult::Invalid) return;
 
-			NodeID id = USE_NODE_STORE | originalOsmID;
-			if (materializeGeometries)
-				id = osmMemTiles.storePoint(p);
+			NodeID id = osmMemTiles.storePoint(p);
 			OutputObject oo(geomType, layers.layerMap[layerName], id, 0, layerMinZoom);
 			outputs.push_back(std::make_pair(std::move(oo), attributes));
 			noteIfDecluttered(LatpLon { latp, lon });
@@ -692,12 +689,7 @@ void OsmLuaProcessing::Layer(const string &layerName, bool area) {
 
 				auto correctionResult = CorrectGeometry(mp);
 				if(correctionResult == CorrectGeometryResult::Invalid) return;
-				NodeID id = 0;
-				if (!materializeGeometries && correctionResult == CorrectGeometryResult::Valid) {
-					id = USE_WAY_STORE | originalOsmID;
-					wayEmitted = true;
-				} else 
-					id = osmMemTiles.storeMultiPolygon(mp);
+				NodeID id = osmMemTiles.storeMultiPolygon(mp);
 				OutputObject oo(geomType, layers.layerMap[layerName], id, 0, layerMinZoom);
 				outputs.push_back(std::make_pair(std::move(oo), attributes));
 			}
@@ -728,12 +720,7 @@ void OsmLuaProcessing::Layer(const string &layerName, bool area) {
 			if(correctionResult == CorrectGeometryResult::Invalid) return;
 
 			if (isWay && !isRelation) {
-				NodeID id = 0;
-				if (!materializeGeometries && correctionResult == CorrectGeometryResult::Valid) {
-					id = USE_WAY_STORE | originalOsmID;
-					wayEmitted = true;
-				}	else 
-					id = osmMemTiles.storeLinestring(ls);
+				NodeID id = osmMemTiles.storeLinestring(ls);
 				lastStoredGeometryId = id;
 				lastStoredGeometryType = geomType;
 				OutputObject oo(geomType, layers.layerMap[layerName], id, 0, layerMinZoom);
@@ -793,20 +780,10 @@ void OsmLuaProcessing::LayerAsCentroid(const string &layerName, kaguya::Variadic
 				if (i == 0) continue;
 				const std::string needle = needleRef.get<std::string>();
 
-				// We do a linear search of the relation's members. This is not very efficient
-				// for relations like Tongass National Park (ID 6535292, 29,000 members),
-				// but in general, it's probably fine.
-				//
-				// I note that relation members seem to be sorted nodes first, then ways,
-				// then relations. I'm not sure if we can rely on that, so I don't
-				// short-circuit on the first non-node.
-				for (int i = 0; i < currentRelation->memids.size(); i++) {
-					if (currentRelation->types[i] != PbfReader::Relation::MemberType::NODE)
-						continue;
-
-					const protozero::data_view role = stringTable->at(currentRelation->roles_sid[i]);
-					if (role.size() == needle.size() && 0 == memcmp(role.data(), needle.data(), role.size())) {
-						relationNode = currentRelation->memids[i];
+				// A linear search of the relation's node members, which are few
+				for (const RelationNodeMember& member : *currentRelationNodes) {
+					if (member.role == needle) {
+						relationNode = member.id;
 						const auto ll = osmStore.nodes.at(relationNode);
 						geomp = Point(ll.lon, ll.latp);
 						centroidFound = true;
@@ -840,29 +817,7 @@ void OsmLuaProcessing::LayerAsCentroid(const string &layerName, kaguya::Variadic
 		return;
 	}
 
-	NodeID id = 0;
-	// We don't do lazy geometries for centroids in these cases:
-	//
-	// - --materialize-geometries is set
-	// - the geometry is a relation - calculating their centroid can be quite expensive,
-	//   and there's not as many of them as there are ways
-	// - when the algorithm chosen is polylabel
-	//     We can extend lazy geometries to this, it just needs some fiddling to
-	//     express it in the ID and measure if there's a runtime impact in computing
-	//     the polylabel twice.
-	if (materializeGeometries || (isRelation && relationNode == 0) || (isWay && algorithm != CentroidAlgorithm::Centroid)) {
-		id = osmMemTiles.storePoint(geomp);
-	} else if (relationNode != 0) {
-		id = USE_NODE_STORE | relationNode;
-	} else if (!isRelation && !isWay) {
-		// Sometimes people call LayerAsCentroid(...) on a node, because they're
-		// writing a generic handler that doesn't know if it's a node or a way,
-		// e.g. POIs.
-		id = USE_NODE_STORE | originalOsmID;
-	} else {
-		id = USE_WAY_STORE | originalOsmID;
-		wayEmitted = true;
-	}
+	NodeID id = osmMemTiles.storePoint(geomp);
 	OutputObject oo(POINT_, layers.layerMap[layerName], id, 0, layerMinZoom);
 	outputs.push_back(std::make_pair(std::move(oo), attributes));
 	noteIfDecluttered(LatpLon { (int32_t)geomp.y(), (int32_t)geomp.x() });
@@ -1165,7 +1120,6 @@ bool OsmLuaProcessing::setNode(NodeID id, LatpLon node, const TagMap& tags) {
 // We are now processing a way
 bool OsmLuaProcessing::setWay(WayID wayId, LatpLonVec const &llVec, const TagMap& tags) {
 	reset();
-	wayEmitted = false;
 	originalOsmID = wayId;
 	isWay = true;
 	llVecPtr = &llVec;
@@ -1204,7 +1158,7 @@ bool OsmLuaProcessing::setWay(WayID wayId, LatpLonVec const &llVec, const TagMap
 	if (!this->empty()) {
 		std::vector<OutputObject> objects = finalizeOutputs();
 		if (!objects.empty()) osmMemTiles.addGeometryToIndex(linestringCached(), objects, originalOsmID);
-		return wayEmitted;
+		return true;
 	}
 
 	return false;
@@ -1212,18 +1166,18 @@ bool OsmLuaProcessing::setWay(WayID wayId, LatpLonVec const &llVec, const TagMap
 
 // We are now processing a relation
 void OsmLuaProcessing::setRelation(
-	const std::vector<protozero::data_view>& stringTable,
-	const PbfReader::Relation& relation,
+	RelationID relationId,
+	const std::vector<RelationNodeMember>& nodeMembers,
 	const WayVec& outerWayVec,
 	const WayVec& innerWayVec,
 	const TagMap& tags,
 	bool isNativeMP, // only OSM type=multipolygon
-	bool isInnerOuter // any OSM relation with "inner" and "outer" roles (e.g. type=multipolygon|boundary)
+	bool isInnerOuter, // any OSM relation with "inner" and "outer" roles (e.g. type=multipolygon|boundary)
+	const RelationShape* shape
 ) {
 	reset();
-	this->stringTable = &stringTable;
-	currentRelation = &relation;
-	originalOsmID = relation.id;
+	currentRelationNodes = &nodeMembers;
+	originalOsmID = relationId;
 	isWay = true;
 	isRelation = true;
 	isClosed = isNativeMP || isInnerOuter;
@@ -1232,6 +1186,15 @@ void OsmLuaProcessing::setRelation(
 	outerWayVecPtr = &outerWayVec;
 	innerWayVecPtr = &innerWayVec;
 	currentTags = &tags;
+	if (shape != nullptr) {
+		if (shape->isArea) {
+			multiPolygonCache = shape->area;
+			multiPolygonInited = true;
+		} else {
+			multiLinestringCache = shape->lines;
+			multiLinestringInited = true;
+		}
+	}
 
 	if (supportsReadingRelations && osmStore.scannedRelations.relation_in_any_relations(originalOsmID)) {
 		relationList = osmStore.scannedRelations.relations_for_relation(originalOsmID);

@@ -18,13 +18,6 @@
 
 // General helper routines
 
-inline void endian_swap(unsigned int& x) {
-	x = (x>>24) | 
-        ((x<<8) & 0x00FF0000) |
-        ((x>>8) & 0x0000FF00) |
-        (x<<24);
-}
-
 inline bool ends_with(std::string const & value, std::string const & ending) {
 	if (ending.size() > value.size()) return false;
 	return std::equal(ending.rbegin(), ending.rend(), value.rbegin());

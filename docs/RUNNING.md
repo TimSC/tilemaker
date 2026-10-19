@@ -1,4 +1,4 @@
-# Running tilemaker
+# Running tilemaker-core
 
 You can get a run-down of available options with
 
@@ -6,62 +6,75 @@ You can get a run-down of available options with
 
 The following document explains each option.
 
-## Standard usage
+## What it does
 
-To create vector tiles from an OpenStreetMap .pbf extract, tilemaker's standard syntax is:
+tilemaker-core renders the vector tiles of one area, from z11 up to the config's maxzoom. Its
+input is the OpenStreetMap data of that area: the objects in it and around it, as a map
+query returns them. It holds the whole input in memory, so the area should be small: a few
+tiles across, not a country. Lower zooms would need far larger areas, so the config's minzoom
+is raised to 11.
 
-    tilemaker --input oxfordshire.osm.pbf \
-              --output oxfordshire.mbtiles \
+## From a file
+
+    tilemaker --input area.osm \
+              --output area.mbtiles \
               --config resources/config-openmaptiles.json \
               --process resources/process-openmaptiles.lua
 
-The `--config` and `--process` arguments are the paths of your JSON config file and Lua 
-processing script. These are described in CONFIGURATION.md. Here we're using the ready-made 
+The input can be `.osm`, `.o5m`, `.pbf` or `.json` (OSM JSON), read by
+[cppo5m](https://github.com/TimSC/cppo5m); gzipped files are not read. A pycrocosm or
+OpenStreetMap API map query gives a suitable file:
+
+    curl -o area.osm "http://localhost:8000/api/0.6/map?bbox=-1.095,50.795,-1.085,50.8"
+
+The area rendered is `--bbox` if given, otherwise the bounds the file declares, otherwise
+those of its nodes. You can give `--input` more than once; the files are read together.
+
+The `--config` and `--process` arguments are the paths of your JSON config file and Lua
+processing script. These are described in CONFIGURATION.md. Here we're using the ready-made
 OpenMapTiles-compatible script.
 
-You can output to an .mbtiles or .pmtiles file. mbtiles is widely supported and easy to serve 
-(it's an sqlite database under the hood). [pmtiles](https://github.com/protomaps/PMTiles) is 
-a newer format optimised for serving over the cloud. You can also write tiles directly to the 
-filesystem by specifying a directory path for `--output`.
+You can output to an .mbtiles or .pmtiles file, or write tiles directly to the filesystem by
+specifying a directory path for `--output`.
 
-This is all you need to know, but if you want to reduce memory requirements, read on.
+## From the map database
 
-## Using on-disk storage
+tilemaker-core can read a pycrocosm map database directly, without going through the API:
 
-By default, tilemaker uses RAM to store the nodes and ways it reads from the .osm.pbf, prior 
-to writing them out as vector tiles. This is fine for small regions, but can impose high memory 
-requirements for larger areas.
+    PGHOST=localhost PGDATABASE=map PGUSER=renderer \
+    tilemaker --db \
+              --bbox -1.095,50.795,-1.085,50.8 \
+              --output area.mbtiles \
+              --config resources/config-openmaptiles.json \
+              --process resources/process-openmaptiles.lua
 
-To use on-disk storage instead, pass the `--store` argument with a path to the directory where 
-you want the temporary store to be created - on an SSD or other fast disk. This allows you 
-to process bigger areas even on memory-constrained systems.
+`--db` alone connects with the libpq `PG*` environment variables; it can also take a libpq
+connection string, such as `--db "host=localhost dbname=map user=renderer"`. Keep the password
+in `PGPASSWORD` or `~/.pgpass` rather than on the command line. A role that can only read is
+enough: everything is read in one read-only transaction.
 
-## Performance and memory tuning
+`--table-prefix` names the table set to read, by default `pycrocosm_mod_` (pgmap's
+`dbtablemodifyprefix`). Its views show the edits over the imported planet, so this is the
+current map.
 
-By default, tilemaker aims to balance memory usage with speed, but with a slight tilt towards 
-minimising memory. You can get faster runtimes, at the expense of a little more memory, by 
-specifying `--fast`.
+The map must store way and relation bounding boxes, which is how the ways and relations
+reaching into the area are found. Map schema versions 15 and 16 are supported; anything else
+is refused.
 
-This is all most people will need to know. But if you have plentiful RAM, you can experiment 
-with these options. In general, options that use more memory run faster - but if you can 
-optimise memory such that your dataset fits entirely in RAM, this will be a big speed-up.
-(`--fast` simply chooses a set of these options for you.)
+If the map keeps the shape cache (pgmap's `way_shapes` and `relation_shapes`), ways and
+relations take their shapes from it. Without it, ways are built from their nodes, fetching
+those outside the area by ID, and multipolygons whose ways reach outside the area have those
+ways fetched too, so that they are whole. Other relations, such as boundaries, are built from
+the ways in the area only.
 
-* `--compact`: Use a smaller, faster data structure for node lookups. __Note__: This requires 
-the .pbf to have nodes in sequential order, typically by using `osmium renumber`.
-* `--no-compress-nodes` and `--no-compress-ways`: Turn off node/way compression. Increases 
-RAM usage but runs faster.
-* `--materialize-geometries`: Generate geometries in advance when reading .pbf. Increases RAM 
-usage but runs faster.
-* `--shard-stores`: Group temporary storage by area. Reduces RAM usage on large files (e.g.
-whole planet) but runs slower.
+## Filtering
 
-You can also tell tilemaker to only look at .pbf objects with certain tags. If you're making a 
-thematic map, this allows tilemaker to skip data it won't need. Specify this in your Lua file 
-like one of these three examples:
+You can tell tilemaker to only look at objects with certain tags. If you're making a thematic
+map, this allows tilemaker to skip data it won't need. Specify this in your Lua file like one
+of these three examples:
 
     -- Only include major roads
-    way_keys = {"highway=motorway", "highway=trunk", "highway=primary", "highway=secondary"}`
+    way_keys = {"highway=motorway", "highway=trunk", "highway=primary", "highway=secondary"}
 
     -- Only include railways
     way_keys = {"railway"}
@@ -71,96 +84,21 @@ like one of these three examples:
 
 ## Merging
 
-You can specify multiple .pbf files on the command line, and tilemaker will read them all in 
-before writing the vector tiles.
-
-Alternatively, you can use the `--merge` switch to add to an existing .mbtiles. Create your
-.mbtiles in the usual way:
-
-    tilemaker --input australia.osm.pbf \
-              --output oceania.mbtiles \
-              [...]
-
-Then rerun with another .pbf, using the `--merge` flag:
-
-    tilemaker --input new-zealand.osm.pbf \
-              --output oceania.mbtiles \
-              --merge \
-              [...]
-
-The second run will proceed a little more slowly due to reading in existing tiles in areas which 
-overlap. Any OSM objects which appear in both files will be written twice.
-
-### Creating a map with varying detail
-
-A map with global coastline, but detailed mapping only for a specific region, is a common use case.
-You can use tilemaker's `--merge` switch to achieve this.
-
-First, create a global coastline .mbtiles. There's a special stripped down config for this:
-
-    tilemaker --output coastline.mbtiles \
-              --bbox -180,-85,180,85 \
-              --process resources/process-coastline.lua \
-              --config resources/config-coastline.json
-
-Save this .mbtiles somewhere; then make a copy, and call it output.mbtiles.
-
-Edit `resources/config-openmaptiles.json` to remove the `ocean`, `urban_areas`, `ice_shelf` and 
-`glacier` layers (because we've already generated these).
-
-Now simply merge the region you want into the coastline .mbtiles you generated:
-
-    tilemaker --input new-zealand.osm.pbf \
-              --output output.mbtiles \
-              --merge \
-              --process resources/process-openmaptiles.lua \
-              --config resources/config-openmaptiles.json
-
-Don't forget to add `--store /path/to/your/ssd` if you don't have lots of RAM.
+You can use the `--merge` switch to add to an existing .mbtiles, for example tiles of a
+neighbouring area, or low zoom tiles made another way. Any OSM objects which appear in both
+will be written twice.
 
 ## Output messages
 
 Running tilemaker with the `--verbose` argument will output any issues encountered during tile
-creation.
+creation, and with `--db`, the time each query took.
 
 Running tilemaker with the `--quiet` argument will suppress anything written to stdout during
 tile creation. stderr is unaffected.
 
-You may see geometry errors reported by Boost::Geometry. This typically reflects an error 
+You may see geometry errors reported by Boost::Geometry. This typically reflects an error
 in the OSM source data (for example, a multipolygon with several inner rings but no outer ring).
-Often, if the geometry could not be written to the layer, the error will subsequently show in 
-a failed attempt to add attributes afterwards.
 
-If you see a (possibly fatal) error about nodes missing from ways, or ways missing from 
-relations, this suggests your source .osm.pbf is malformed. This will often happen if you have 
-used another program to clip the .osm.pbf with a bounding polygon. You can tell tilemaker to 
-ignore missing nodes in ways with `--skip-integrity`, but it can't fix missing ways in 
-multipolygon relations. Instead, tell your clipping utility to create a well-formed file using 
-`--strategy=smart` (Osmium) or `clipIncompleteEntities=true` (Osmosis).
-
-tilemaker is meant for use with OSM data. It will likely not work if you add your own data 
-to the .osm.pbf file with unusual IDs (e.g. negative IDs or very large numbers). If you must 
-do this, use a tool like `osmium renumber` first to get the IDs back to a normal range.
-
-## Github Action
-
-You can integrate tilemaker as a Github Action into your [Github Workflow](https://help.github.com/en/actions).  
-Here is an example:
-
-```yaml
-- uses: systemed/tilemaker@v2.0.0
-  with:
-    # Required, same to --input
-    input: /path/to/osm.pbf
-    # Required, same to --output. Could be a directory or a .mbtiles files
-    output: /path/to/output
-    # Optional, same to --config
-    # If not being set, default to resources/config-openmaptiles.json
-    config: /path/to/config
-    # Optional, same to --process
-    # If not being set, default to resources/process-openmaptiles.lua
-    process: /path/to/lua
-    # Optional, other arguments
-    # If not being set, default to '--verbose'
-    extra: --threads 0
-```
+Ways missing some of their nodes are skipped, and counted in a message. A map query includes
+every node of the ways it returns, so this suggests the input was clipped some other way. You
+can tell tilemaker to use what nodes there are with `--skip-integrity`.

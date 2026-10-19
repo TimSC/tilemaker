@@ -13,10 +13,6 @@
 #include <deque>
 #include <unordered_set>
 
-// A 36-bit integer can store all OSM node IDs; we represent this as 16 collections
-// of 32-bit integers.
-#define NODE_SHARDS 16
-typedef uint32_t ShardedNodeID;
 typedef uint64_t NodeID;
 typedef uint64_t WayID;
 typedef uint64_t RelationID;

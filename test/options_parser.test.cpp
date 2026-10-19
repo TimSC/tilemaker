@@ -47,66 +47,44 @@ MU_TEST(test_options_parser) {
 
 	// Common happy path is output and input
 	{
-		std::vector<std::string> args = {"--output", "foo.mbtiles", "--input", "ontario.pbf"};
+		std::vector<std::string> args = {"--output", "foo.mbtiles", "--input", "area.o5m"};
 		auto opts = parse(args);
 		mu_check(opts.inputFiles.size() == 1);
-		mu_check(opts.inputFiles[0] == "ontario.pbf");
+		mu_check(opts.inputFiles[0] == "area.o5m");
 		mu_check(opts.outputFile == "foo.mbtiles");
 		mu_check(opts.outputMode == OutputMode::MBTiles);
-		mu_check(!opts.osm.materializeGeometries);
-		mu_check(!opts.osm.shardStores);
+		mu_check(!opts.useDatabase);
 	}
 
-	// --fast without store should have materialized geometries
+	// Several input files
 	{
-		std::vector<std::string> args = {"--output", "foo.mbtiles", "--input", "ontario.pbf", "--fast"};
-		auto opts = parse(args);
-		mu_check(opts.inputFiles.size() == 1);
-		mu_check(opts.inputFiles[0] == "ontario.pbf");
-		mu_check(opts.outputFile == "foo.mbtiles");
-		mu_check(opts.outputMode == OutputMode::MBTiles);
-		mu_check(opts.osm.materializeGeometries);
-		mu_check(!opts.osm.shardStores);
-	}
-
-	// --store should optimize for reduced memory
-	{
-		std::vector<std::string> args = {"--output", "foo.mbtiles", "--input", "ontario.pbf", "--store", "/tmp/store"};
-		auto opts = parse(args);
-		mu_check(opts.inputFiles.size() == 1);
-		mu_check(opts.inputFiles[0] == "ontario.pbf");
-		mu_check(opts.outputFile == "foo.mbtiles");
-		mu_check(opts.outputMode == OutputMode::MBTiles);
-		mu_check(opts.osm.storeFile == "/tmp/store");
-		mu_check(!opts.osm.materializeGeometries);
-		mu_check(opts.osm.shardStores);
-	}
-
-	// --store --fast should optimize for speed
-	{
-		std::vector<std::string> args = {"--output", "foo.pmtiles", "--input", "ontario.pbf", "--store", "/tmp/store", "--fast"};
-		auto opts = parse(args);
-		mu_check(opts.inputFiles.size() == 1);
-		mu_check(opts.inputFiles[0] == "ontario.pbf");
-		mu_check(opts.outputFile == "foo.pmtiles");
-		mu_check(opts.outputMode == OutputMode::PMTiles);
-		mu_check(opts.osm.storeFile == "/tmp/store");
-		mu_check(!opts.osm.materializeGeometries);
-		mu_check(!opts.osm.shardStores);
-	}
-
-	// Two input files implies --materialize
-	{
-		std::vector<std::string> args = {"--output", "foo.mbtiles", "--input", "ontario.pbf", "--input", "alberta.pbf"};
+		std::vector<std::string> args = {"--output", "foo.pmtiles", "--input", "a.osm", "--input", "b.pbf"};
 		auto opts = parse(args);
 		mu_check(opts.inputFiles.size() == 2);
-		mu_check(opts.inputFiles[0] == "ontario.pbf");
-		mu_check(opts.inputFiles[1] == "alberta.pbf");
-		mu_check(opts.outputFile == "foo.mbtiles");
-		mu_check(opts.outputMode == OutputMode::MBTiles);
-		mu_check(opts.osm.materializeGeometries);
-		mu_check(!opts.osm.shardStores);
+		mu_check(opts.inputFiles[1] == "b.pbf");
+		mu_check(opts.outputMode == OutputMode::PMTiles);
 	}
+
+	// The map database, with the PG* environment variables
+	{
+		std::vector<std::string> args = {"--output", "foo.mbtiles", "--db", "--bbox", "-1.1,50.79,-1.08,50.8"};
+		auto opts = parse(args);
+		mu_check(opts.useDatabase);
+		mu_check(opts.dbConnection.empty());
+		mu_check(opts.tablePrefix == "pycrocosm_mod_");
+		mu_check(opts.inputFiles.empty());
+	}
+
+	// The map database, with a connection string and table set
+	{
+		std::vector<std::string> args = {"--output", "foo.mbtiles", "--db=dbname=map", "--table-prefix", "other_", "--bbox", "-1.1,50.79,-1.08,50.8"};
+		auto opts = parse(args);
+		mu_check(opts.useDatabase);
+		mu_check(opts.dbConnection == "dbname=map");
+		mu_check(opts.tablePrefix == "other_");
+	}
+
+	ASSERT_THROWS("--db needs a --bbox", "--output", "foo.mbtiles", "--db");
 
 	ASSERT_THROWS("Couldn't open .json config", "--input", "foo", "--output", "bar", "--config", "nonexistent-config.json");
 	ASSERT_THROWS("Couldn't open .lua script", "--input", "foo", "--output", "bar", "--process", "nonexistent-script.lua");

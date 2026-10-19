@@ -1,83 +1,39 @@
-# tilemaker
+# tilemaker-core
 
-tilemaker creates vector tiles (in Mapbox Vector Tile format) from an .osm.pbf planet extract, as typically downloaded from providers like Geofabrik. It aims to be 'stack-free': you need no database and there is only one executable to install.
+tilemaker-core renders the vector tiles (in Mapbox Vector Tile format) of a small area from its OpenStreetMap data, read from a file or directly from a [pycrocosm](https://github.com/TimSC/pycrocosm) map database. It is a cut-down [tilemaker](https://github.com/systemed/tilemaker): the same Lua tag processing, JSON layer config, geometry handling and tile output, without the machinery for reading whole countries or the planet.
 
-Vector tiles are used by many in-browser/app renderers, and can also power server-side raster rendering. They enable on-the-fly style changes and greater interactivity, while imposing less of a storage burden. tilemaker can output them to individual files, or to .mbtiles or .pmtiles tile containers.
+* Input: an `.osm`, `.o5m`, `.pbf` or OSM JSON file covering the area (such as an API map query), read by [cppo5m](https://github.com/TimSC/cppo5m), or the map database's tables for the area.
+* Output: `.mbtiles`, `.pmtiles`, or a directory of tiles.
+* Zooms: 11 and up. Lower zooms would need far larger areas.
+* Everything is held in memory, which is fine for an area a few tiles across.
 
-See an example of a vector tile map produced by tilemaker at [tilemaker.org](https://tilemaker.org).
+Upstream tilemaker's PBF reader, its on-disk, sorted and sharded stores and lazy geometries have been removed.
 
-![Continuous Integration](https://github.com/systemed/tilemaker/workflows/Continuous%20Integration/badge.svg)
+## Getting started
 
-## Getting Started
+Build it (see [INSTALL.md](docs/INSTALL.md) for dependencies):
 
-We provide a ready-to-use docker image that gets you started without having to compile tilemaker from source:
+    git submodule update --init --recursive
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build --parallel
 
-1. Go to [Geofabrik](http://download.geofabrik.de/europe.html) and download the `monaco-latest.osm.pbf` snapshot of OpenStreetMap
-2. Run tilemaker on the OpenStreetMap snapshot to generate [Protomaps](https://protomaps.com) vector tiles (see below)
+Render an area from a map query:
 
-```
-    docker run -it --rm -v $(pwd):/data ghcr.io/systemed/tilemaker:master /data/monaco-latest.osm.pbf --output /data/monaco-latest.pmtiles
-```
+    curl -o area.osm "http://localhost:8000/api/0.6/map?bbox=-1.095,50.795,-1.085,50.8"
+    build/tilemaker --input area.osm --output area.mbtiles
 
-3. Check out what's in the vector tiles e.g. by using the debug viewer [here](https://protomaps.github.io/PMTiles/)
+or straight from the map database:
 
-To run tilemaker with its default configuration
+    build/tilemaker --db "dbname=map user=renderer" --bbox -1.095,50.795,-1.085,50.8 --output area.mbtiles
 
-```bash
-docker run -it --rm --pull always -v $(pwd):/data \
-  ghcr.io/systemed/tilemaker:master \
-  /data/monaco-latest.osm.pbf \
-  --output /data/monaco-latest.pmtiles
-```
-
-To run tilemaker with a custom configuration using coastlines and landcover you have two options
-1. In the config.json use absolute paths such as `/data/coastline/water_polygons.shp` or
-2. Set the docker workdir `-w /data` with relative paths `coastline/water_polygons.shp` (see below)
-
-```bash
-docker run -it --rm --pull always -v $(pwd):/data -w /data \
-  ghcr.io/systemed/tilemaker:master \
-  /data/monaco-latest.osm.pbf \
-  --output /data/monaco-latest.pmtiles \
-  --config /data/config-coastline.json \
-  --process /data/process-coastline.lua
-```
-
-## Installing
-
-tilemaker is written in C++14. The chief dependencies are:
-
-* Boost (latest version advised, 1.66 minimum)
-* Lua (5.1 or later) or LuaJIT
-* sqlite3
-* shapelib
-* rapidjson
-
-Other third-party code is bundled in the include/ directory.
-
-You can then simply install with:
-
-    make
-    sudo make install
-	
-For detailed installation instructions for your operating system, see [INSTALL.md](docs/INSTALL.md).
-
-## Out-of-the-box setup
-
-tilemaker comes with configuration files compatible with the popular [OpenMapTiles](https://openmaptiles.org) schema, and a demonstration map server. You'll run tilemaker to make vector tiles from your `.osm.pbf` source data. To create the tiles, run this from the tilemaker directory:
-
-    tilemaker /path/to/your/input.osm.pbf /path/to/your/output.mbtiles
-
-tilemaker keeps everything in RAM by default. To process large areas without running out of memory, tell it to use temporary storage on SSD:
-
-    tilemaker /path/to/your/input.osm.pbf /path/to/your/output.mbtiles --store /path/to/your/ssd
-
-Then, to serve your tiles using the demonstration server:
+Then, to look at your tiles with the demonstration server:
 
     cd server
-	tilemaker-server /path/to/your/output.mbtiles
+    ../build/tilemaker-server ../area.mbtiles
 
-You can now navigate to http://localhost:8080/ and see your map!
+and open http://localhost:8080/ in a browser.
+
+Read about the options in [RUNNING.md](docs/RUNNING.md).
 
 ## Coastline and Landcover
 
@@ -86,7 +42,7 @@ To include sea tiles and small-scale landcover, run
     ./get-coastline.sh
     ./get-landcover.sh
 
-This will download coastline and landcover data; you will need around 2GB disk space.
+This will download coastline and landcover data; you will need around 2GB disk space. They are loaded at startup, for whatever area is being rendered.
 
 Have a look at the coastline and landcover example in the [`resources/`](./resources) directory.
 
@@ -101,38 +57,18 @@ You can read more about these in [CONFIGURATION.md](docs/CONFIGURATION.md).
 
 The JSON configuration and Lua processing files are specified with `--config` and `--process` respectively. Defaults are config.json and process.lua in the current directory. If there is no config.json and process.lua in the current directory, and you do not specify `--config` and `--process`, an error will result.
 
-Read about tilemaker's runtime options in [RUNNING.md](docs/RUNNING.md).
-
 You might also find these resources helpful:
 
 * Read our [introduction to vector tiles](docs/VECTOR_TILES.md).
 * See https://github.com/mapbox/awesome-vector-tiles for a list of renderers which support vector tiles.
 
-## Why tilemaker?
-
-You might use tilemaker if:
-
-* You want to create vector tiles yourself, without a third-party contract
-* You don't want to host/maintain a database
-* You want a flexible system capable of advanced OSM tag processing
-* You want to create ready-to-go tiles for offline use
-
-But don't use tilemaker if:
-
-* You want someone else to create and host the tiles for you
-* You want continuous updates with the latest OSM data
-
 ## Contributing
 
-Bug reports, suggestions and (especially!) pull requests are very welcome on the Github issue tracker. Please check the tracker to see if your issue is already known, and be nice. For questions, please use IRC (irc.oftc.net or https://irc.osm.org, channel #osm-dev) and https://community.osm.org.
-
-Formatting: braces and indents as shown, hard tabs (4sp). (Yes, I know.) Please be conservative about adding dependencies or increasing the memory requirement.
-
-The Makefile does not currently pick up changes to header files (.h). If you change these, you may need to run `make clean` before building with `make` and `sudo make install`.
+Formatting: braces and indents as shown, hard tabs (4sp). Please be conservative about adding dependencies or increasing the memory requirement.
 
 ## Copyright
 
-tilemaker is maintained by Richard Fairhurst and supported by [many contributors](https://github.com/systemed/tilemaker/graphs/contributors). We particularly celebrate the invaluable contributions of Wouter van Kleunen, who passed away in 2022.
+tilemaker-core is a cut-down fork of [tilemaker](https://github.com/systemed/tilemaker), which is maintained by Richard Fairhurst and supported by [many contributors](https://github.com/systemed/tilemaker/graphs/contributors). We particularly celebrate the invaluable contributions of Wouter van Kleunen, who passed away in 2022.
 
 Copyright tilemaker contributors, 2015-2025.
 
@@ -140,15 +76,15 @@ The tilemaker code is licensed as FTWPL; you may do anything you like with this 
 
 Licenses of third-party libraries:
 
+- [cppo5m](https://github.com/TimSC/cppo5m) is licensed under BSD, and its iso8601lib under MIT
 - [kaguya](https://github.com/satoren/kaguya) is licensed under the Boost Software Licence
 - [libdeflate](https://github.com/ebiggers/libdeflate/) is licensed under MIT
 - [libpopcnt](https://github.com/kimwalisch/libpopcnt) is licensed under BSD 2-clause
 - [minunit](https://github.com/siu/minunit) is licensed under MIT
 - [pmtiles](https://github.com/protomaps/PMTiles) is licensed under BSD 3-clause
 - [polylabel](https://github.com/mapbox/polylabel) is licensed under ISC
-- [protozero](https://github.com/mapbox/protozero) is licensed under BSD 2-clause
 - [Simple-Web-Server](https://gitlab.com/eidheim/Simple-Web-Server) is licensed under MIT
+- [protozero](https://github.com/mapbox/protozero) is licensed under BSD 2-clause
 - [sqlite_modern_cpp](https://github.com/SqliteModernCpp/sqlite_modern_cpp) is licensed under MIT
-- [streamvbyte](https://github.com/lemire/streamvbyte) is licensed under Apache 2
 - [visvalingam.cpp](https://github.com/felt/tippecanoe/blob/main/visvalingam.cpp) is licensed under MIT
 - [vtzero](https://github.com/mapbox/vtzero) is licensed under BSD 2-clause
