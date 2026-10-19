@@ -33,7 +33,6 @@ namespace OptionsParser {
 		std::string modifyPrefix;
 		std::string luaFile;
 		std::string jsonFile;
-		uint32_t threadNum = 0;
 		std::string outputFile;
 		std::string bbox;
 

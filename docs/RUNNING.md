@@ -129,6 +129,12 @@ You can use the `--merge` switch to add to an existing .mbtiles, for example til
 neighbouring area, or low zoom tiles made another way. Any OSM objects which appear in both
 will be written twice.
 
+## Performance
+
+tilemaker-core runs on one thread: a single tile has nothing to share between threads, and an
+area of z11+ tiles takes seconds. To render several tiles at once, run several tilemakers, as
+the demonstration server does.
+
 ## Output messages
 
 Running tilemaker with the `--verbose` argument will output any issues encountered during tile

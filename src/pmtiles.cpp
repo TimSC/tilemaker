@@ -4,7 +4,6 @@
 #include <vector>
 #include <map>
 #include <unordered_map>
-#include <mutex>
 
 #include "pmtiles.h"
 #include "helpers.h"
@@ -29,14 +28,8 @@ void PMTiles::close(std::string &metadata) {
 	std::vector<pmtiles::entryv3> rootEntries;
 	std::vector<pmtiles::entryv3> entries;
 	leafStart = outputStream.tellp();
-	if (isSparse) {
-		for (auto it : sparseIndex) {
-			appendTileEntry(it.first, it.second, rootEntries, entries);
-		}
-	} else {
-		for (size_t tileId=0; tileId<denseIndex.size(); tileId++) {
-			if (denseIndex[tileId].length != 0xffffff) appendTileEntry(tileId, denseIndex[tileId], rootEntries, entries);
-		}
+	for (auto it : tileIndex) {
+		appendTileEntry(it.first, it.second, rootEntries, entries);
 	}
 	if (numTileEntries < ROOT_ONLY) {
 		rootEntries.insert(rootEntries.end(), entries.begin(), entries.end());
@@ -119,7 +112,6 @@ void PMTiles::flushEntries(std::vector<pmtiles::entryv3> &rootEntries, std::vect
 	entries.clear();
 
 	// write the leaf directory to disk
-	std::lock_guard<std::mutex> lock(fileMutex);
 	uint64_t location = outputStream.tellp();
 	uint64_t length = compressed.size();
 	outputStream.write(compressed.c_str(), compressed.size());
@@ -131,23 +123,18 @@ void PMTiles::flushEntries(std::vector<pmtiles::entryv3> &rootEntries, std::vect
 
 // Write a tile to file and store it in the index
 // - if the tile is small and has already been written, reuse that instead
-// - we're a bit fussy about mutexs because compress_string is expensive
 void PMTiles::saveTile(int zoom, int x, int y, std::string &data) {
 	TileOffset offset;
 	bool isNew = false;
 	uint64_t tileId = pmtiles::zxy_to_tileid(zoom,x,y);
 
 	// if it's a tiny tile (e.g. sea), see if we've written it already
-	std::unique_lock<std::mutex> indexLock1(indexMutex);
 	if (data.size()<TINY_LENGTH && tinyCache.find(data) != tinyCache.end()) {
 		offset = tinyCache[data];
-		indexLock1.unlock();
 
 	// otherwise, compress it and write
 	} else {
-		indexLock1.unlock();
 		std::string compressed = compress_string(data, Z_DEFAULT_COMPRESSION, true);
-		std::lock_guard<std::mutex> lock(fileMutex);
 		// write to file
 		offset = TileOffset(static_cast<uint64_t>(outputStream.tellp()) - HEADER_ROOT, compressed.size());
 		outputStream.write(compressed.c_str(), compressed.size());
@@ -156,14 +143,8 @@ void PMTiles::saveTile(int zoom, int x, int y, std::string &data) {
 	}
 	
 	// store in index
-	std::lock_guard<std::mutex> indexLock2(indexMutex);
 	numTilesAddressed++;
-	if (isSparse) {
-		sparseIndex[tileId] = offset;
-	} else {
-		if (tileId >= denseIndex.size()) denseIndex.resize(tileId+10000, { 0, 0xffffff });
-		denseIndex[tileId] = offset;
-	}
+	tileIndex[tileId] = offset;
 
 	// add to cache if tiny
 	if (isNew && data.size()<TINY_LENGTH) {

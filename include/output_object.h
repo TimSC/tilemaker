@@ -2,6 +2,7 @@
 #ifndef _OUTPUT_OBJECT_H
 #define _OUTPUT_OBJECT_H
 
+#include <cmath>
 #include <vector>
 #include <string>
 #include <map>

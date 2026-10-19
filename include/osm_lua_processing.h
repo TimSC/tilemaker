@@ -6,7 +6,6 @@
 #include <string>
 #include <sstream>
 #include <map>
-#include <mutex>
 #include "geom.h"
 #include "osm_store.h"
 #include "shared_data.h"
@@ -263,7 +262,6 @@ public:
 	bool isPostScanRelation;				// processing a relation in postScanRelation
 
 	static std::unordered_map<std::string, std::string> dataStore;
-	static std::mutex dataStoreMutex;
 
 private:
 	/// Internal: clear current cached state

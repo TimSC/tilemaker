@@ -2,7 +2,6 @@
 #ifndef _DECLUTTER_H
 #define _DECLUTTER_H
 
-#include <mutex>
 #include <vector>
 #include "coordinates.h"
 #include "output_object.h"
@@ -50,7 +49,6 @@ private:
 	bool anyLayers = false;
 	std::vector<bool> layerEnabled;
 	std::vector<std::vector<DeclutterEntry>> entries;	// one per layer
-	std::vector<std::mutex> mutexes;					//  |
 };
 
 #endif //_DECLUTTER_H

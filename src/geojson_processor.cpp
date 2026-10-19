@@ -1,8 +1,6 @@
 #include "geojson_processor.h"
 
 #include "helpers.h"
-#include <boost/asio/thread_pool.hpp>
-#include <boost/asio/post.hpp>
 #include <exception>
 
 #include "rapidjson/document.h"
@@ -36,63 +34,28 @@ void GeoJSONProcessor::readFeatureCollection(class LayerDef &layer, uint layerNu
 	}
 
 	// Process each feature
-	std::exception_ptr error;
-	std::mutex errorMutex;
-	boost::asio::thread_pool pool(threadNum);
-	for (auto &feature : doc["features"].GetArray()) { 
-		boost::asio::post(pool, [&]() {
-			try {
-				processFeature(std::move(feature.GetObject()), layer, layerNum);
-			} catch (...) {
-				std::lock_guard<std::mutex> lock(errorMutex);
-				if (!error)
-					error = std::current_exception();
-			}
-		});
-	}
-	pool.join();
-	if (error)
-		std::rethrow_exception(error);
+	for (auto &feature : doc["features"].GetArray())
+		processFeature(std::move(feature.GetObject()), layer, layerNum);
 }
 
 void GeoJSONProcessor::readFeatureLines(class LayerDef &layer, uint layerNum) {
 	// Read a JSON file containing multiple GeoJSON items, newline-delimited.
-	std::vector<OffsetAndLength> chunks = getNewlineChunks(layer.source, threadNum * 4);
+	FilePtr fp = openFile(layer.source, "r");
+	char readBuffer[65536];
+	rapidjson::FileReadStream is(fp.get(), readBuffer, sizeof(readBuffer));
 
-	// Process each feature
-	std::exception_ptr error;
-	std::mutex errorMutex;
-	boost::asio::thread_pool pool(threadNum);
-	for (auto &chunk : chunks) { 
-		boost::asio::post(pool, [&]() {
-			try {
-				FilePtr fp = openFile(layer.source, "r");
-				if (fseek(fp.get(), chunk.offset, SEEK_SET) != 0) throw std::runtime_error("unable to seek to " + std::to_string(chunk.offset) + " in " + layer.source);
-				char readBuffer[65536];
-				rapidjson::FileReadStream is(fp.get(), readBuffer, sizeof(readBuffer));
+	// Skip leading whitespace.
+	while(isspace(is.Peek())) is.Take();
 
-				// Skip leading whitespace.
-				while(is.Tell() < chunk.length && isspace(is.Peek())) is.Take();
+	while(is.Peek() != '\0') {
+		auto doc = rapidjson::Document();
+		doc.ParseStream<rapidjson::kParseStopWhenDoneFlag>(is);
+		if (doc.HasParseError()) { throw std::runtime_error("Invalid JSON file."); }
+		processFeature(std::move(doc.GetObject()), layer, layerNum);
 
-				while(is.Tell() < chunk.length) {
-					auto doc = rapidjson::Document();
-					doc.ParseStream<rapidjson::kParseStopWhenDoneFlag>(is);
-					if (doc.HasParseError()) { throw std::runtime_error("Invalid JSON file."); }
-					processFeature(std::move(doc.GetObject()), layer, layerNum);
-
-					// Skip trailing whitespace.
-					while(is.Tell() < chunk.length && isspace(is.Peek())) is.Take();
-				}
-			} catch (...) {
-				std::lock_guard<std::mutex> lock(errorMutex);
-				if (!error)
-					error = std::current_exception();
-			}
-		});
+		// Skip trailing whitespace.
+		while(isspace(is.Peek())) is.Take();
 	}
-	pool.join();
-	if (error)
-		std::rethrow_exception(error);
 }
 
 template <bool Flag, typename T>
@@ -217,7 +180,6 @@ std::vector<Point> GeoJSONProcessor::pointsFromGeoJSONArray(const rapidjson::Gen
 
 // Read properties and generate an AttributeIndex
 AttributeIndex GeoJSONProcessor::readProperties(const rapidjson::Value &pr, bool &hasName, std::string &name, LayerDef &layer, unsigned &minzoom, int32_t &score) {
-	std::lock_guard<std::mutex> lock(attributeMutex);
 	AttributeStore& attributeStore = osmLuaProcessing.getAttributeStore();
 	AttributeSet attributes;
 

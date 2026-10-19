@@ -1,9 +1,9 @@
 #include <algorithm>
 #include <iostream>
 #include <sstream>
+#include <boost/sort/sort.hpp>
 #include "tile_data.h"
 #include "coordinates_geom.h"
-#include "leased_store.h"
 #include <ciso646>
 
 using namespace std;
@@ -39,215 +39,25 @@ static bool repairMultiPolygon(MultiPolygon &mp, NodeID objectID) {
 	return ok;
 }
 
-thread_local LeasedStore<TileDataSource::point_store_t> pointStore;
-thread_local LeasedStore<TileDataSource::linestring_store_t> linestringStore;
-thread_local LeasedStore<TileDataSource::multi_linestring_store_t> multilinestringStore;
-thread_local LeasedStore<TileDataSource::multi_polygon_store_t> multipolygonStore;
-
-void releaseThreadStoreLeases() {
-	pointStore.release();
-	linestringStore.release();
-	multilinestringStore.release();
-	multipolygonStore.release();
-}
-
-TileDataSource::TileDataSource(size_t threadNum, unsigned int indexZoom, bool includeID)
-	:
-	includeID(includeID),
-	z6OffsetDivisor(indexZoom >= CLUSTER_ZOOM ? (1 << (indexZoom - CLUSTER_ZOOM)) : 1),
-	objectsMutex(threadNum * 4),
-	objects(CLUSTER_ZOOM_AREA),
-	lowZoomObjects(CLUSTER_ZOOM_AREA),
-	objectsWithIds(CLUSTER_ZOOM_AREA),
-	lowZoomObjectsWithIds(CLUSTER_ZOOM_AREA),
-	indexZoom(indexZoom),
-	pointStores(threadNum),
-	linestringStores(threadNum),
-	multilinestringStores(threadNum),
-	multipolygonStores(threadNum),
-	multiPolygonClipCache(ClipCache<MultiPolygon>(threadNum, indexZoom)),
-	multiLinestringClipCache(ClipCache<MultiLinestring>(threadNum, indexZoom))
+TileDataSource::TileDataSource(unsigned int indexZoom, bool includeID)
+	: includeID(includeID), indexZoom(indexZoom)
 {
 	// TileDataSource can only index up to zoom 14. The caller is responsible for
 	// ensuring it does not use a higher zoom.
 	if (indexZoom > 14)
 		throw std::out_of_range("TileDataSource: indexZoom cannot be higher than 14, but was " + std::to_string(indexZoom));
-
-
-	shardBits = 0;
-	numShards = 1;
-	while(numShards < threadNum) {
-		shardBits++;
-		numShards *= 2;
-	}
-
-	for (int i = 0; i < threadNum; i++) {
-		availablePointStoreLeases.push_back(std::make_pair(i, &pointStores[i]));
-		availableLinestringStoreLeases.push_back(std::make_pair(i, &linestringStores[i]));
-		availableMultiLinestringStoreLeases.push_back(std::make_pair(i, &multilinestringStores[i]));
-		availableMultiPolygonStoreLeases.push_back(std::make_pair(i, &multipolygonStores[i]));
-	}
-}
-
-thread_local std::vector<std::tuple<TileCoordinates, OutputObject, uint64_t>>* tlsPendingSmallIndexObjects = nullptr;
-
-void TileDataSource::finalize(size_t threadNum) {
-	uint64_t finalized = 0;
-	for (const auto& vec : pendingSmallIndexObjects) {
-		for (const auto& tuple : vec) {
-			finalized++;
-			addObjectToSmallIndexUnsafe(std::get<0>(tuple), std::get<1>(tuple), std::get<2>(tuple));
-		}
-	}
-
-	if (verbose) std::cout << name() << ": indexed " << finalized << " contended objects" << std::endl;
-
-	finalizeObjects<OutputObjectXY>(name(), threadNum, indexZoom, objects.begin(), objects.end(), lowZoomObjects);
-	finalizeObjects<OutputObjectXYID>(name(), threadNum, indexZoom, objectsWithIds.begin(), objectsWithIds.end(), lowZoomObjectsWithIds);
 }
 
 void TileDataSource::addObjectToSmallIndex(const TileCoordinates& index, const OutputObject& oo, uint64_t id) {
-	// Pick the z6 index
-	const size_t z6x = index.x / z6OffsetDivisor;
-	const size_t z6y = index.y / z6OffsetDivisor;
-
-	if (z6x >= 64 || z6y >= 64) {
+	if (index.x >= (1u << indexZoom) || index.y >= (1u << indexZoom)) {
 		if (verbose) std::cerr << "ignoring OutputObject with invalid z" << indexZoom << " coordinates " << index.x << ", " << index.y << " (id: " << id << ")" << std::endl;
 		return;
 	}
-
-	const size_t z6index = z6x * CLUSTER_ZOOM_WIDTH + z6y;
-	auto& mutex = objectsMutex[z6index % objectsMutex.size()];
-
-	if (mutex.try_lock()) {
-		addObjectToSmallIndexUnsafe(index, oo, id);
-		mutex.unlock();
-	} else {
-		// add to tlsPendingSmallIndexObjects
-		if (tlsPendingSmallIndexObjects == nullptr) {
-			std::lock_guard<std::mutex> lock(objectsMutex[0]);
-			pendingSmallIndexObjects.push_back(std::vector<std::tuple<TileCoordinates, OutputObject, uint64_t>>());
-			tlsPendingSmallIndexObjects = &pendingSmallIndexObjects.back();
-		}
-
-		tlsPendingSmallIndexObjects->push_back(std::make_tuple(index, oo, id));
-	}
+	smallIndex[index].push_back({oo, includeID ? id : 0});
 }
 
-void TileDataSource::addObjectToSmallIndexUnsafe(const TileCoordinates& index, const OutputObject& oo, uint64_t id) {
-	// Pick the z6 index
-	const size_t z6x = index.x / z6OffsetDivisor;
-	const size_t z6y = index.y / z6OffsetDivisor;
-	const size_t z6index = z6x * CLUSTER_ZOOM_WIDTH + z6y;
-
-	if (id == 0 || !includeID)
-		objects[z6index].push_back({
-			oo,
-			(Z6Offset)(index.x - (z6x * z6OffsetDivisor)),
-			(Z6Offset)(index.y - (z6y * z6OffsetDivisor))
-		});
-	else
-		objectsWithIds[z6index].push_back({
-			oo,
-			(Z6Offset)(index.x - (z6x * z6OffsetDivisor)),
-			(Z6Offset)(index.y - (z6y * z6OffsetDivisor)),
-			id
-		});
-}
-
-void TileDataSource::collectTilesWithObjectsAtZoom(std::vector<std::shared_ptr<TileCoordinatesSet>>& zooms) {
-	// Scan through all shards. Convert to base zoom, then convert to the requested zoom.
-	collectTilesWithObjectsAtZoomTemplate<OutputObjectXY>(indexZoom, objects.begin(), objects.size(), zooms);
-	collectTilesWithObjectsAtZoomTemplate<OutputObjectXYID>(indexZoom, objectsWithIds.begin(), objectsWithIds.size(), zooms);
-}
-
-void addCoveredTilesToOutput(const uint indexZoom, std::vector<std::shared_ptr<TileCoordinatesSet>>& zooms, const Box& box) {
-	size_t maxZoom = zooms.size() - 1;
-// 	std::cout << "addCoveredTilesToOutput maxZoom=" << maxZoom << ", indexZoom - maxZoom = " << (indexZoom - maxZoom) << std::endl;
-	int scale = pow(2, indexZoom - maxZoom);
-	TileCoordinate minx = box.min_corner().x() / scale;
-	TileCoordinate maxx = box.max_corner().x() / scale;
-	TileCoordinate miny = box.min_corner().y() / scale;
-	TileCoordinate maxy = box.max_corner().y() / scale;
-	for (int x=minx; x<=maxx; x++) {
-		for (int y=miny; y<=maxy; y++) {
-			size_t zx = x, zy = y;
-
-			for (int zoom = maxZoom; zoom >= 0; zoom--) {
-				zooms[zoom]->set(zx, zy);
-				zx /= 2;
-				zy /= 2;
-			}
-		}
-	}
-}
-
-// Find the tiles used by the "large objects" from the rtree index
-void TileDataSource::collectTilesWithLargeObjectsAtZoom(std::vector<std::shared_ptr<TileCoordinatesSet>>& zooms) {
-	for(auto const &result: boxRtree)
-		addCoveredTilesToOutput(indexZoom, zooms, result.first);
-
-	for(auto const &result: boxRtreeWithIds)
-		addCoveredTilesToOutput(indexZoom, zooms, result.first);
-}
-
-// Copy objects from the tile at dstIndex (in the dataset srcTiles) into output
-void TileDataSource::collectObjectsForTile(
-	uint zoom,
-	TileCoordinates dstIndex,
-	std::vector<OutputObjectID>& output
-) {
-	if (zoom < CLUSTER_ZOOM) {
-		collectLowZoomObjectsForTile<OutputObjectXY>(indexZoom, lowZoomObjects, zoom, dstIndex, output);
-		collectLowZoomObjectsForTile<OutputObjectXYID>(indexZoom, lowZoomObjectsWithIds, zoom, dstIndex, output);
-		return;
-	}
-
-	size_t iStart = 0;
-	size_t iEnd = objects.size();
-
-	if (zoom >= CLUSTER_ZOOM) {
-		TileCoordinate z6x = dstIndex.x / (1 << (zoom - CLUSTER_ZOOM));
-		TileCoordinate z6y = dstIndex.y / (1 << (zoom - CLUSTER_ZOOM));
-
-		if (z6x >= 64 || z6y >= 64) {
-			if (verbose) std::cerr << "collectObjectsForTile: invalid tile z" << zoom << "/" << dstIndex.x << "/" << dstIndex.y << std::endl;
-			return;
-		}
-		iStart = z6x * CLUSTER_ZOOM_WIDTH + z6y;
-		iEnd = iStart + 1;
-	}
-
-	collectObjectsForTileTemplate<OutputObjectXY>(indexZoom, objects.begin(), iStart, iEnd, zoom, dstIndex, output);
-	collectObjectsForTileTemplate<OutputObjectXYID>(indexZoom, objectsWithIds.begin(), iStart, iEnd, zoom, dstIndex, output);
-}
-
-// Copy objects from the large index into output
-void TileDataSource::collectLargeObjectsForTile(
-	uint zoom,
-	TileCoordinates dstIndex,
-	std::vector<OutputObjectID>& output
-) {
-	unsigned int clampedZoom = zoom;
-	while (clampedZoom > indexZoom) {
-		clampedZoom--;
-		dstIndex.x /= 2;
-		dstIndex.y /= 2;
-	}
-	int scale = pow(2, indexZoom - clampedZoom);
-	TileCoordinates srcIndex1( dstIndex.x   *scale  ,  dstIndex.y   *scale  );
-	TileCoordinates srcIndex2((dstIndex.x+1)*scale-1, (dstIndex.y+1)*scale-1);
-	Box box = Box(geom::make<Point>(srcIndex1.x, srcIndex1.y),
-	              geom::make<Point>(srcIndex2.x, srcIndex2.y));
-	for(auto const& result: boxRtree | boost::geometry::index::adaptors::queried(boost::geometry::index::intersects(box))) {
-		if (result.second.minZoom <= zoom)
-			output.push_back({result.second, 0});
-	}
-
-	for(auto const& result: boxRtreeWithIds | boost::geometry::index::adaptors::queried(boost::geometry::index::intersects(box))) {
-		if (result.second.oo.minZoom <= zoom)
-			output.push_back({result.second.oo, result.second.id});
-	}
+void TileDataSource::addObjectToLargeIndex(const Box& tiles, const OutputObject& oo, uint64_t id) {
+	largeIndex.push_back({tiles, {oo, includeID ? id : 0}});
 }
 
 // Build node and way geometries
@@ -300,37 +110,18 @@ Geometry TileDataSource::buildWayGeometry(OutputGeometryType const geomType,
 		}
 
 		case MULTILINESTRING_: {
-			// Look for a previously clipped version at z-1, z-2, ...
-			std::shared_ptr<MultiLinestring> cachedClip = multiLinestringClipCache.get(bbox.zoom, bbox.index.x, bbox.index.y, objectID);
-
-			MultiLinestring uncached;
-
-			if (cachedClip == nullptr) {
-				const auto& input = retrieveMultiLinestring(objectID);
-				boost::geometry::assign(uncached, input);
-			}
-
-			const auto &mls = cachedClip == nullptr ? uncached : *cachedClip;
+			MultiLinestring mls;
+			boost::geometry::assign(mls, retrieveMultiLinestring(objectID));
 
 			// investigate whether filtering the constituent linestrings improves performance
 			MultiLinestring result;
 			geom::intersection(mls, bbox.getExtendBox(), result);
-			multiLinestringClipCache.add(bbox, objectID, result);
 			return result;
 		}
 
 		case POLYGON_: {
-			// Look for a previously clipped version at z-1, z-2, ...
-			std::shared_ptr<MultiPolygon> cachedClip = multiPolygonClipCache.get(bbox.zoom, bbox.index.x, bbox.index.y, objectID);
-
-			MultiPolygon uncached;
-
-			if (cachedClip == nullptr) {
-				// The cached multipolygon uses a non-standard allocator, so copy it
-				populateMultiPolygon(uncached, objectID);
-			}
-
-			const auto &input = cachedClip == nullptr ? uncached : *cachedClip;
+			MultiPolygon input;
+			populateMultiPolygon(input, objectID);
 
 			Box box = bbox.clippingBox;
 			
@@ -377,20 +168,13 @@ Geometry TileDataSource::buildWayGeometry(OutputGeometryType const geomType,
 					std::min(box.max_corner().y(), extBox.max_corner().y()));
 			}
 
-			MultiPolygon mp;
-			if (cachedClip == nullptr)
-				mp = std::move(uncached);
-			else
-				geom::assign(mp, input);
+			MultiPolygon mp = input;
 			fast_clip(mp, box);
 			geom::correct(mp);
 			geom::validity_failure_type failure = geom::validity_failure_type::no_failure;
 			bool valid = geom::is_valid(mp,failure);
 			if (!valid) {
 				if (verbose) {
-					// Build the whole line first and emit it with a single stream write:
-					// tilemaker runs multi-threaded and chained operator<< calls are not
-					// atomic, so per-token writes interleave into unreadable output.
 					std::ostringstream msg;
 					msg << "invalid multipolygon for object " << objectID
 					    << " at z" << bbox.zoom << " " << bbox.index.x << "/" << bbox.index.y
@@ -406,20 +190,13 @@ Geometry TileDataSource::buildWayGeometry(OutputGeometryType const geomType,
 					// fast_clip can introduce self-intersections; redo the clip with the
 					// slower but robust Boost intersection against the original geometry.
 					MultiPolygon output;
-					if (cachedClip == nullptr) {
-						MultiPolygon original;
-						populateMultiPolygon(original, objectID);
-						geom::intersection(original, box, output);
-					} else {
-						geom::intersection(input, box, output);
-					}
+					geom::intersection(input, box, output);
 					geom::correct(output);
 
 					// The intersection result can itself still be invalid for very complex
 					// multipolygons (e.g. large reservoirs), which previously produced
 					// dropped or holey tiles. Repair it before returning.
 					repairMultiPolygon(output, objectID);
-					multiPolygonClipCache.add(bbox, objectID, output);
 					return output;
 				} else if (!valid) {
 					// occasionally also wrong_topological_dimension, disconnected_interior:
@@ -429,7 +206,6 @@ Geometry TileDataSource::buildWayGeometry(OutputGeometryType const geomType,
 				}
 			}
 
-			multiPolygonClipCache.add(bbox, objectID, mp);
 			return mp;
 		}
 
@@ -449,48 +225,74 @@ LatpLon TileDataSource::buildNodeGeometry(NodeID const objectID, const TileBbox 
 
 // Report number of stored geometries
 void TileDataSource::reportSize() const {
-	size_t points = 0, linestrings = 0, polygons = 0;
-	for (const auto& store : pointStores)
-		points += store.size();
-
-	for (const auto& store : linestringStores)
-		linestrings += store.size();
-
-	for (const auto& store : multilinestringStores)
-		linestrings += store.size();
-
-	for (const auto& store : multipolygonStores)
-		polygons += store.size();
-
-	std::cout << "Generated points: " << (points - 1) << ", lines: " << (linestrings - 2) << ", polygons: " << (polygons - 1) << std::endl;
+	std::cout << "Generated points: " << (pointStore.size() - 1)
+	          << ", lines: " << (linestringStore.size() + multilinestringStore.size() - 2)
+	          << ", polygons: " << (multipolygonStore.size() - 1) << std::endl;
 }
 
-void populateTilesAtZoom(
-	const std::vector<class TileDataSource *>& sources,
-	std::vector<std::shared_ptr<TileCoordinatesSet>>& zooms
-) {
-	if (zooms.size() > 15)
-		throw std::out_of_range("populateTilesAtZoom: expected at most z14 zooms (15), but found " + std::to_string(zooms.size()) + " vectors");
-
-	for(size_t i=0; i<sources.size(); i++) {
-		sources[i]->collectTilesWithObjectsAtZoom(zooms);
-		sources[i]->collectTilesWithLargeObjectsAtZoom(zooms);
-	}
-}
-
-void sortOutputObjectIDs(
+// Lexicographic comparison, with the order of: layer, geomType, attributes, and objectID.
+// Note that attributes is preferred to objectID.
+// It is to arrange objects with the identical attributes continuously.
+// Such objects will be merged into one object, to reduce the size of output.
+static void sortOutputObjectIDs(
 	const std::vector<bool>& sortOrders, 
 	std::vector<OutputObjectID>& data
-);
+) {
+	boost::sort::pdqsort(data.begin(), data.end(), [&sortOrders](const OutputObjectID& x, const OutputObjectID& y) -> bool {
+		if (x.oo.layer < y.oo.layer) return true;
+		if (x.oo.layer > y.oo.layer) return false;
+		if (x.oo.z_order < y.oo.z_order) return  sortOrders[x.oo.layer];
+		if (x.oo.z_order > y.oo.z_order) return !sortOrders[x.oo.layer];
+		if (x.oo.geomType < y.oo.geomType) return true;
+		if (x.oo.geomType > y.oo.geomType) return false;
+		if (x.oo.attributes < y.oo.attributes) return true;
+		if (x.oo.attributes > y.oo.attributes) return false;
+		if (x.oo.objectID < y.oo.objectID) return true;
+		return false;
+	});
+}
 
 std::vector<OutputObjectID> TileDataSource::getObjectsForTile(
 	const std::vector<bool>& sortOrders, 
 	unsigned int zoom,
 	TileCoordinates coordinates
-) {
+) const {
+	// The tile's range of tiles at indexZoom; above it, the one tile it is in
+	TileCoordinate minX, minY, maxX, maxY;
+	if (zoom >= indexZoom) {
+		minX = maxX = coordinates.x >> (zoom - indexZoom);
+		minY = maxY = coordinates.y >> (zoom - indexZoom);
+	} else {
+		const TileCoordinate scale = 1u << (indexZoom - zoom);
+		minX = coordinates.x * scale; maxX = minX + scale - 1;
+		minY = coordinates.y * scale; maxY = minY + scale - 1;
+	}
+
 	std::vector<OutputObjectID> data;
-	collectObjectsForTile(zoom, coordinates, data);
-	collectLargeObjectsForTile(zoom, coordinates, data);
+	auto take = [&](const std::vector<OutputObjectID>& objects) {
+		for (const auto& object : objects)
+			if (object.oo.minZoom <= zoom) data.push_back(object);
+	};
+	// Look up each tile in the range, or go through the index if that is quicker
+	const uint64_t rangeSize = uint64_t(maxX - minX + 1) * (maxY - minY + 1);
+	if (rangeSize <= smallIndex.size()) {
+		for (TileCoordinate x = minX; x <= maxX; x++)
+			for (TileCoordinate y = minY; y <= maxY; y++) {
+				auto it = smallIndex.find(TileCoordinates(x, y));
+				if (it != smallIndex.end()) take(it->second);
+			}
+	} else {
+		for (const auto& entry : smallIndex)
+			if (entry.first.x >= minX && entry.first.x <= maxX && entry.first.y >= minY && entry.first.y <= maxY)
+				take(entry.second);
+	}
+
+	Box range(geom::make<Point>(minX, minY), geom::make<Point>(maxX, maxY));
+	for (const auto& large : largeIndex)
+		if (large.object.oo.minZoom <= zoom && geom::intersects(large.tiles, range))
+			data.push_back(large.object);
+
+	// An object in several of the tiles is found more than once
 	sortOutputObjectIDs(sortOrders, data);
 	data.erase(unique(data.begin(), data.end()), data.end());
 	return data;
@@ -615,27 +417,16 @@ void TileDataSource::addGeometryToIndex(
 }
 
 NodeID TileDataSource::storePoint(const Point& input) {
-	const auto& store = pointStore.get(this);
-
-	NodeID offset = store.second->size();
-	store.second->emplace_back(input);
-	NodeID rv = (store.first << (TILE_DATA_ID_SIZE - shardBits)) + offset;
-	return rv;
+	pointStore.emplace_back(input);
+	return pointStore.size() - 1;
 }
 
 NodeID TileDataSource::storeLinestring(const Linestring& src) {
-	const auto& store = linestringStore.get(this);
-	linestring_t dst(src.begin(), src.end());
-
-	NodeID offset = store.second->size();
-	store.second->emplace_back(std::move(dst));
-	NodeID rv = (store.first << (TILE_DATA_ID_SIZE - shardBits)) + offset;
-	return rv;
+	linestringStore.emplace_back(src.begin(), src.end());
+	return linestringStore.size() - 1;
 }
 
 NodeID TileDataSource::storeMultiPolygon(const MultiPolygon& src) {
-	const auto& store = multipolygonStore.get(this);
-
 	multi_polygon_t dst;
 	dst.resize(src.size());
 	for(std::size_t i = 0; i < src.size(); ++i) {
@@ -648,26 +439,18 @@ NodeID TileDataSource::storeMultiPolygon(const MultiPolygon& src) {
 			boost::geometry::assign(dst[i].inners()[j], src[i].inners()[j]);
 		}
 	}
-
-	NodeID offset = store.second->size();
-	store.second->emplace_back(std::move(dst));
-	NodeID rv = (store.first << (TILE_DATA_ID_SIZE - shardBits)) + offset;
-	return rv;
+	multipolygonStore.emplace_back(std::move(dst));
+	return multipolygonStore.size() - 1;
 }
 
 NodeID TileDataSource::storeMultiLinestring(const MultiLinestring& src) {
-	const auto& store = multilinestringStore.get(this);
-
 	multi_linestring_t dst;
 	dst.resize(src.size());
 	for (std::size_t i=0; i<src.size(); ++i) {
 		boost::geometry::assign(dst[i], src[i]);
 	}
-
-	NodeID offset = store.second->size();
-	store.second->emplace_back(std::move(dst));
-	NodeID rv = (store.first << (TILE_DATA_ID_SIZE - shardBits)) + offset;
-	return rv;
+	multilinestringStore.emplace_back(std::move(dst));
+	return multilinestringStore.size() - 1;
 }
 
 void TileDataSource::populateMultiPolygon(MultiPolygon& dst, NodeID objectID) {

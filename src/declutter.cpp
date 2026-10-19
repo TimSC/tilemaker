@@ -22,11 +22,9 @@ void Declutter::configure(const std::vector<LayerDef>& layers) {
 	}
 	if (!anyLayers) return;
 	entries.resize(layers.size());
-	mutexes = std::vector<std::mutex>(layers.size());
 }
 
 void Declutter::add(const OutputObject& oo, LatpLon point, uint64_t id, int32_t score, bool fromShapefile) {
-	std::lock_guard<std::mutex> lock(mutexes[oo.layer]);
 	entries[oo.layer].push_back({ oo, point, id, score, fromShapefile });
 }
 

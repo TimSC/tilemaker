@@ -228,7 +228,7 @@ If your Lua file causes an error due to mistaken syntax, you can test it at the 
 
 `way_keys` is similar, but for ways. For ways, you may also wish to express the filter in terms of the tag value, or as an inversion. For example, to exclude buildings: `way_keys = {"~building"}`. To build a map only of major roads: `way_keys = {"highway=motorway", "highway=trunk", "highway=primary", "highway=secondary"}`
 
-`init_function(name, is_first)` and `exit_function` are called at the start and end of processing (once per thread). You can use this to output statistics or even to read a small amount of external data. `is_first` will be true only the first time `init_function` is called.
+`init_function(name, is_first)` and `exit_function` are called at the start and end of processing. You can use this to output statistics or even to read a small amount of external data. `is_first` is always true: tilemaker-core processes on one thread, so `init_function` is called once.
 
 Other functions are described below and in RELATIONS.md.
 
@@ -292,7 +292,7 @@ To enable these functions, set `index` to true in your shapefile layer definitio
 
 ### Lua key/value store
 
-tilemaker has a simple key/value store accessible from Lua which you can use to bring in external data. The same store is used across all processing threads.
+tilemaker has a simple key/value store accessible from Lua which you can use to bring in external data. It lasts for the whole run.
 
 Read your data from file, using [Lua's I/O functions](https://www.lua.org/pil/21.1.html), in `init_function` (checking that `is_first` is set for the first run only). Set a key/value pair with `SetData(key,value)` - for example `SetData("name","Bill")`. Both key and value should be strings.
 

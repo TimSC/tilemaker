@@ -10,8 +10,8 @@
 using namespace std;
 extern bool verbose;
 
-thread_local bool enabledUserSignal = false;
-thread_local MultiPolygon scaledMultiPolygon;
+static bool enabledUserSignal = false;
+static MultiPolygon scaledMultiPolygon;
 typedef std::vector<OutputObjectID>::const_iterator OutputObjectsConstIt;
 typedef std::pair<OutputObjectsConstIt, OutputObjectsConstIt> OutputObjectsConstItPair;
 

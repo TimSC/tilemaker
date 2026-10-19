@@ -1,14 +1,11 @@
 #include <iostream>
 #include <algorithm>
-#include <atomic>
-#include <thread>
 #include <vector>
 #include "external/minunit.h"
 #include "attribute_store.h"
 
 MU_TEST(test_attribute_store) {
 	AttributeStore store;
-	store.reset();
 
 	mu_check(store.size() == 0);
 
@@ -74,7 +71,6 @@ MU_TEST(test_attribute_store) {
 
 MU_TEST(test_attribute_store_reuses) {
 	AttributeStore store;
-	store.reset();
 
 	mu_check(store.size() == 0);
 
@@ -103,68 +99,40 @@ MU_TEST(test_attribute_store_reuses) {
 	}
 }
 
-MU_TEST(test_attribute_store_capacity) {
-	// We support a maximum of 511 attribute name, so confirm that we can roundtrip
-	// this value.
-	AttributePair pair(511, true, 0);
-	mu_check(pair.keyIndex == 511);
-
-	// Confirm that the attribute store will throw if we try to add more than 511 keys.
+MU_TEST(test_attribute_key_store) {
 	AttributeKeyStore keys;
 
-	for (int i = 1; i <= 511; i++) {
-		const uint16_t keyIndex = keys.key2index("key" + std::to_string(i));
-		mu_check(keyIndex == i);
-	}
-
-	// Trying to add a 512th key should throw
-	bool caughtException = false;
-
-	try {
-		keys.key2index("key512");
-	} catch (const std::out_of_range&) {
-		caughtException = true;
-	}
-
-	mu_check(caughtException == true);
+	// Keys are numbered from 1, and keep their numbers
+	for (int i = 1; i <= 1000; i++)
+		mu_check(keys.key2index("key" + std::to_string(i)) == i);
+	mu_check(keys.key2index("key512") == 512);
+	mu_check(keys.getKey(512) == "key512");
 }
 
-MU_TEST(test_attribute_key_store_threaded) {
-	AttributeKeyStore keys;
-	const int keyCount = 128;
-	const int threadCount = 8;
-	const int iterations = 100;
-	std::atomic<bool> start(false);
-	std::atomic<bool> failed(false);
-	std::vector<std::thread> threads;
+MU_TEST(test_attribute_set_replaces_key) {
+	AttributeStore store;
+	AttributeSet s;
+	store.addAttribute(s, "class", std::string("road"), 0);
+	store.addAttribute(s, "rank", 3, 0);
+	s.removePairWithKey(store.pairStore, store.keyStore.key2index("class"));
+	store.addAttribute(s, "class", std::string("path"), 0);
 
-	for (int thread = 0; thread < threadCount; thread++) {
-		threads.emplace_back([&, thread]() {
-			while (!start.load(std::memory_order_acquire)) {}
-
-			for (int i = 0; i < iterations * keyCount; i++) {
-				const int keyNum = (i + thread * 17) % keyCount;
-				const std::string key = "key" + std::to_string(keyNum);
-				const uint16_t firstIndex = keys.key2index(key);
-				const uint16_t secondIndex = keys.key2index(key);
-				if (firstIndex == 0 || firstIndex > keyCount || firstIndex != secondIndex)
-					failed.store(true, std::memory_order_release);
-			}
-		});
-	}
-
-	start.store(true, std::memory_order_release);
-	for (std::thread& thread : threads)
-		thread.join();
-
-	mu_check(failed.load(std::memory_order_acquire) == false);
+	const auto pairs = store.getUnsafe(store.add(s));
+	mu_check(pairs.size() == 2);
+	int classes = 0;
+	for (const auto pair : pairs)
+		if (pair->keyIndex == store.keyStore.key2index("class")) {
+			classes++;
+			mu_check(pair->stringValue() == "path");
+		}
+	mu_check(classes == 1);
 }
 
 MU_TEST_SUITE(test_suite_attribute_store) {
 	MU_RUN_TEST(test_attribute_store);
 	MU_RUN_TEST(test_attribute_store_reuses);
-	MU_RUN_TEST(test_attribute_store_capacity);
-	MU_RUN_TEST(test_attribute_key_store_threaded);
+	MU_RUN_TEST(test_attribute_key_store);
+	MU_RUN_TEST(test_attribute_set_replaces_key);
 }
 
 int main() {

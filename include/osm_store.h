@@ -10,7 +10,6 @@
 
 #include <utility>
 #include <vector>
-#include <mutex>
 #include <set>
 #include <unordered_set>
 #include <boost/container/flat_map.hpp>
@@ -31,75 +30,53 @@ class RelationScanStore {
 
 private:
 	using tag_map_t = boost::container::flat_map<std::string, std::string>;
-	std::vector<std::map<WayID, std::vector<std::pair<RelationID, uint16_t>>>> relationsForWays;
-	std::vector<std::map<NodeID, std::vector<std::pair<RelationID, uint16_t>>>> relationsForNodes;
-	std::vector<std::map<RelationID, tag_map_t>> relationTags;
-	mutable std::vector<std::mutex> mutex;
+	std::map<WayID, std::vector<std::pair<RelationID, uint16_t>>> relationsForWays;
+	std::map<NodeID, std::vector<std::pair<RelationID, uint16_t>>> relationsForNodes;
+	std::map<RelationID, tag_map_t> relationTags;
 	RelationRoles relationRoles;
 
 public:
 	std::map<RelationID, std::vector<std::pair<RelationID, uint16_t>>> relationsForRelations;
 
-	RelationScanStore(): relationsForWays(128), relationsForNodes(128), relationTags(128), mutex(128) {}
-
 	void relation_contains_way(RelationID relid, WayID wayid, std::string role) {
-		uint16_t roleId = relationRoles.getOrAddRole(role);
-		const size_t shard = wayid % mutex.size();
-		std::lock_guard<std::mutex> lock(mutex[shard]);
-		relationsForWays[shard][wayid].emplace_back(std::make_pair(relid, roleId));
+		relationsForWays[wayid].emplace_back(relid, relationRoles.getOrAddRole(role));
 	}
 	void relation_contains_node(RelationID relid, NodeID nodeId, std::string role) {
-		uint16_t roleId = relationRoles.getOrAddRole(role);
-		const size_t shard = nodeId % mutex.size();
-		std::lock_guard<std::mutex> lock(mutex[shard]);
-		relationsForNodes[shard][nodeId].emplace_back(std::make_pair(relid, roleId));
+		relationsForNodes[nodeId].emplace_back(relid, relationRoles.getOrAddRole(role));
 	}
 	void relation_contains_relation(RelationID relid, RelationID relationId, std::string role) {
-		uint16_t roleId = relationRoles.getOrAddRole(role);
-		std::lock_guard<std::mutex> lock(mutex[0]);
-		relationsForRelations[relationId].emplace_back(std::make_pair(relid, roleId));
+		relationsForRelations[relationId].emplace_back(relid, relationRoles.getOrAddRole(role));
 	}
 	void store_relation_tags(RelationID relid, const tag_map_t &tags) {
-		const size_t shard = relid % mutex.size();
-		std::lock_guard<std::mutex> lock(mutex[shard]);
-		relationTags[shard][relid] = tags;
+		relationTags[relid] = tags;
 	}
 	void set_relation_tag(RelationID relid, const std::string &key, const std::string &value) {
-		const size_t shard = relid % mutex.size();
-		std::lock_guard<std::mutex> lock(mutex[shard]);
-		relationTags[shard][relid][key] = value;
+		relationTags[relid][key] = value;
 	}
 	bool way_in_any_relations(WayID wayid) {
-		const size_t shard = wayid % mutex.size();
-		return relationsForWays[shard].find(wayid) != relationsForWays[shard].end();
+		return relationsForWays.find(wayid) != relationsForWays.end();
 	}
 	bool node_in_any_relations(NodeID nodeId) {
-		const size_t shard = nodeId % mutex.size();
-		return relationsForNodes[shard].find(nodeId) != relationsForNodes[shard].end();
+		return relationsForNodes.find(nodeId) != relationsForNodes.end();
 	}
 	bool relation_in_any_relations(RelationID relId) {
 		return relationsForRelations.find(relId) != relationsForRelations.end();
 	}
 	std::string getRole(uint16_t roleId) const { return relationRoles.getRole(roleId); }
 	const std::vector<std::pair<WayID, uint16_t>>& relations_for_way(WayID wayid) {
-		const size_t shard = wayid % mutex.size();
-		return relationsForWays[shard][wayid];
+		return relationsForWays[wayid];
 	}
 	const std::vector<std::pair<RelationID, uint16_t>>& relations_for_node(NodeID nodeId) {
-		const size_t shard = nodeId % mutex.size();
-		return relationsForNodes[shard][nodeId];
+		return relationsForNodes[nodeId];
 	}
 	const std::vector<std::pair<RelationID, uint16_t>>& relations_for_relation(RelationID relId) {
 		return relationsForRelations[relId];
 	}
 	bool has_relation_tags(RelationID relId) {
-		const size_t shard = relId % mutex.size();
-		return relationTags[shard].find(relId) != relationTags[shard].end();
+		return relationTags.find(relId) != relationTags.end();
 	}
-
 	const tag_map_t& relation_tags(RelationID relId) {
-		const size_t shard = relId % mutex.size();
-		return relationTags[shard][relId];
+		return relationTags[relId];
 	}
 	// return all the parent relations (and their parents &c.) for a given relation
 	std::vector<std::pair<RelationID, uint16_t>> relations_for_relation_with_parents(RelationID relId) {
@@ -123,9 +100,8 @@ public:
 		return out;
 	}
 	std::string get_relation_tag(RelationID relid, const std::string &key) {
-		const size_t shard = relid % mutex.size();
-		auto it = relationTags[shard].find(relid);
-		if (it==relationTags[shard].end()) return "";
+		auto it = relationTags.find(relid);
+		if (it==relationTags.end()) return "";
 		auto jt = it->second.find(key);
 		if (jt==it->second.end()) return "";
 		return jt->second;

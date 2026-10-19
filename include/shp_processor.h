@@ -18,10 +18,9 @@ class ShpProcessor {
 
 public:
 	ShpProcessor(Box &clippingBox, 
-	             uint threadNum,
 	             class ShpMemTiles &shpMemTiles,
 	             OsmLuaProcessing &osmLuaProcessing) : 
-		 clippingBox(clippingBox), threadNum(threadNum),
+		 clippingBox(clippingBox),
 		 shpMemTiles(shpMemTiles), osmLuaProcessing(osmLuaProcessing)
 	{}
 
@@ -30,10 +29,8 @@ public:
 
 private:	
 	Box clippingBox;
-	unsigned threadNum;
 	ShpMemTiles &shpMemTiles;
 	OsmLuaProcessing &osmLuaProcessing;
-	std::mutex attributeMutex;
 
 	void fillPointArrayFromShapefile(std::vector<Point> *points, SHPObject *shape, uint part);
 

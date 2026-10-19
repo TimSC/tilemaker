@@ -3,17 +3,8 @@
 #define _MBTILES_H
 
 #include <string>
-#include <mutex>
 #include <vector>
 #include "external/sqlite_modern_cpp.h"
-
-struct PendingStatement {
-	int zoom;
-	int x;
-	int y;
-	std::string data;
-	bool isMerge;
-};
 
 /** \brief Write to MBTiles (sqlite) database
 *
@@ -22,14 +13,7 @@ struct PendingStatement {
 class MBTiles { 
 	sqlite::database db;
 	std::vector<sqlite::database_binder> preparedStatements;
-	std::mutex m;
-	bool inTransaction;
-
-	std::shared_ptr<std::vector<PendingStatement>> pendingStatements1, pendingStatements2;
-	std::mutex pendingStatementsMutex;
-
-	void insertOrReplace(int zoom, int x, int y, const std::string& data, bool isMerge);
-	void flushPendingStatements();
+	bool inTransaction = false;
 
 public:
 	MBTiles();

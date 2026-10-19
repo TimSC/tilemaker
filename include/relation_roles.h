@@ -1,22 +1,19 @@
 #ifndef RELATION_ROLES_H
 #define RELATION_ROLES_H
 
-#include <boost/container/flat_map.hpp>
-#include <mutex>
+#include <cstdint>
+#include <map>
 #include <vector>
 #include <string>
 
+// Numbers the roles of relation members, so that they can be kept as numbers
 class RelationRoles {
 public:
-	RelationRoles();
 	uint16_t getOrAddRole(const std::string& role);
-	std::string getRole(uint16_t role) const;
+	std::string getRole(uint16_t role) const { return roles.at(role); }
 
 private:
-	std::vector<std::string> popularRoleStrings;
-	std::vector<std::string> rareRoleStrings;
-	std::mutex mutex;
-	boost::container::flat_map<std::string, uint16_t> popularRoles;
-	boost::container::flat_map<std::string, uint16_t> rareRoles;
+	std::vector<std::string> roles = {""};
+	std::map<std::string, uint16_t> roleIndexes = {{"", 0}};
 };
 #endif

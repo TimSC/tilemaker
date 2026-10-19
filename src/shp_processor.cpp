@@ -1,7 +1,5 @@
 #include "shp_processor.h"
 
-#include <boost/asio/thread_pool.hpp>
-#include <boost/asio/post.hpp>
 #include <exception>
 #include <memory>
 #include <type_traits>
@@ -60,7 +58,6 @@ AttributeIndex ShpProcessor::readShapefileAttributes(
 		int recordNum, unordered_map<int,string> &columnMap, unordered_map<int,int> &columnTypeMap,
 		LayerDef &layer, uint &minzoom, int32_t &score) {
 
-	std::lock_guard<std::mutex> lock(attributeMutex);
 	AttributeStore& attributeStore = osmLuaProcessing.getAttributeStore();
 
 	AttributeSet attributes;
@@ -163,9 +160,6 @@ void ShpProcessor::read(class LayerDef &layer, uint layerNum)
 	int indexField=-1;
 	if (indexName!="") { indexField = DBFGetFieldIndex(dbf.get(),indexName.c_str()); }
 
-	std::exception_ptr error;
-	std::mutex errorMutex;
-	boost::asio::thread_pool pool(threadNum);
 	for (int i=0; i<numEntities; i++) {
 		SHPObject* rawShape = SHPReadObject(shp.get(), i);
 		if(rawShape == nullptr) { cerr << "Error loading shape from shapefile" << endl; continue; }
@@ -180,29 +174,17 @@ void ShpProcessor::read(class LayerDef &layer, uint layerNum)
 			continue;
 		}
 
-		boost::asio::post(pool, [&, i, shape]() {
-			try {
-				// process attributes
-				string name;
-				bool hasName = false;
-				if (indexField>-1) {
-					std::lock_guard<std::mutex> lock(attributeMutex);
-					name=DBFReadStringAttribute(dbf.get(), i, indexField); hasName = true;
-				}
-				int32_t score = 0;
-				AttributeIndex attrIdx = readShapefileAttributes(dbf.get(), i, columnMap, columnTypeMap, layer, layer.minzoom, score);
-				// process geometry
-				processShapeGeometry(shape.get(), attrIdx, layer, layerNum, hasName, name, score);
-			} catch (...) {
-				std::lock_guard<std::mutex> lock(errorMutex);
-				if (!error)
-					error = std::current_exception();
-			}
-		});
+		// process attributes
+		string name;
+		bool hasName = false;
+		if (indexField>-1) {
+			name=DBFReadStringAttribute(dbf.get(), i, indexField); hasName = true;
+		}
+		int32_t score = 0;
+		AttributeIndex attrIdx = readShapefileAttributes(dbf.get(), i, columnMap, columnTypeMap, layer, layer.minzoom, score);
+		// process geometry
+		processShapeGeometry(shape.get(), attrIdx, layer, layerNum, hasName, name, score);
 	}
-	pool.join();
-	if (error)
-		std::rethrow_exception(error);
 }
 
 void ShpProcessor::processShapeGeometry(SHPObject* shape, AttributeIndex attrIdx,

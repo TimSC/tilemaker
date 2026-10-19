@@ -85,8 +85,7 @@ static bool renderTile(const RenderSettings &settings, unsigned zoom, unsigned x
         "--table-prefix", settings.tablePrefix, "--modify-prefix", settings.modifyPrefix,
         "--tile", to_string(zoom) + "/" + to_string(x) + "/" + to_string(y),
         "--output", (dir / "tiles").string(),
-        "--config", settings.config, "--process", settings.process,
-        "--threads", "1", "--quiet"};
+        "--config", settings.config, "--process", settings.process, "--quiet"};
     bool ok = runProgram(args, settings.timeoutSeconds, error);
     if (ok) {
         // tilemaker writes nothing for a tile with nothing in it

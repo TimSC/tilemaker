@@ -11,8 +11,6 @@
 #include <sstream>
 #include <cmath>
 #include <stdexcept>
-#include <thread>
-#include <mutex>
 #include <chrono>
 
 // Other utilities
@@ -22,7 +20,6 @@
 #include <boost/program_options.hpp>
 #include <boost/variant.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/asio/thread_pool.hpp>
 
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
@@ -59,8 +56,6 @@
 #include "osm_mem_tiles.h"
 #include "shp_mem_tiles.h"
 
-#include <boost/asio/post.hpp>
-#include <boost/interprocess/streams/bufferstream.hpp>
 
 #ifndef TM_VERSION
 #define TM_VERSION (version not set)
@@ -80,18 +75,12 @@ bool verbose = false;
 // and lower zooms would need far larger areas than the input is meant to hold.
 const unsigned int MIN_ZOOM = 11;
 
-void sortTileCoordinates(
-    const size_t baseZoom,
-    const size_t threadNum,
-    std::deque<std::pair<unsigned int, TileCoordinates>>& tileCoordinates
-);
-
 /**
- *\brief The Main function is responsible for command line processing, loading data and starting worker threads.
+ *\brief The Main function is responsible for command line processing, loading data and writing the tiles.
  *
  * Data is loaded into OsmMemTiles and ShpMemTiles.
  *
- * Worker threads write the output tiles, and start in the outputProc function.
+ * Each tile is then written by outputProc.
  */
 int main(const int argc, const char* argv[]) {
 	// ----	Read command-line options
@@ -265,8 +254,8 @@ int main(const int argc, const char* argv[]) {
 	declutter.configure(layers.layers);
 
 	const unsigned int indexZoom = std::min(config.baseZoom, 14u);
-	class OsmMemTiles osmMemTiles(options.threadNum, indexZoom, config.includeID);
-	class ShpMemTiles shpMemTiles(options.threadNum, indexZoom, declutter);
+	class OsmMemTiles osmMemTiles(indexZoom, config.includeID);
+	class ShpMemTiles shpMemTiles(indexZoom, declutter);
 	osmMemTiles.open();
 	shpMemTiles.open();
 
@@ -276,8 +265,8 @@ int main(const int argc, const char* argv[]) {
 	// ---- Load external sources (shp/geojson)
 
 	{
-		ShpProcessor shpProcessor(clippingBox, options.threadNum, shpMemTiles, osmLuaProcessing);
-		GeoJSONProcessor geoJSONProcessor(clippingBox, options.threadNum, shpMemTiles, osmLuaProcessing);
+		ShpProcessor shpProcessor(clippingBox, shpMemTiles, osmLuaProcessing);
+		GeoJSONProcessor geoJSONProcessor(clippingBox, shpMemTiles, osmLuaProcessing);
 		for (size_t layerNum=0; layerNum<layers.layers.size(); layerNum++) {
 			LayerDef &layer = layers.layers[layerNum];
 			if(layer.indexed) { shpMemTiles.CreateNamedLayerIndex(layer.name); }
@@ -315,15 +304,9 @@ int main(const int argc, const char* argv[]) {
 	// ----	Run the OSM data through the Lua profile
 
 	ProcessOsmArea(osmArea, osmStore, osmLuaProcessing, significantNodeTags, significantWayTags);
-	// This thread leased geometry stores while processing (see leased_store.h).
-	// Upstream read on threads that ended before main returned; here they are
-	// handed back now, while osmMemTiles still exists, not when the thread
-	// exits after it is gone.
-	releaseThreadStoreLeases();
 	osmArea = OsmArea(); // no longer needed
 	osmStore.reportSize();
 	std::vector<bool> sortOrders = layers.getSortOrders();
-	attributeStore.finalize();
 	osmMemTiles.reportSize();
 	attributeStore.reportSize();
 	osmLuaProcessing.dataStore.clear(); // no longer needed
@@ -347,62 +330,13 @@ int main(const int argc, const char* argv[]) {
 
 	// ----	Write out data
 
-	// Launch the pool with threadNum threads
-	boost::asio::thread_pool pool(options.threadNum);
-
-	// Mutex is hold when IO is performed
-	std::mutex io_mutex;
-
-	// Loop through tiles
-	std::atomic<uint64_t> tilesWritten(0), lastTilesWritten(0);
-
 	// Rank any decluttered point features, and index them at their allotted zoom levels
 	declutter.apply(layers.layers, osmMemTiles, shpMemTiles);
 
-	for (auto source : sources) {
-		source->finalize(options.threadNum);
-	}
-	// tiles by zoom level
-
-	std::deque<std::pair<unsigned int, TileCoordinates>> tileCoordinates;
-	std::vector<std::shared_ptr<TileCoordinatesSet>> zoomResults;
-	zoomResults.reserve(sharedData.config.endZoom + 1);
-
-	// Add PreciseTileCoordinatesSet, but only up to z14.
-	for (uint zoom = 0; zoom <= std::min(14u, sharedData.config.endZoom); zoom++) {
-		zoomResults.emplace_back(std::make_shared<PreciseTileCoordinatesSet>(zoom));
-	}
-
-	{
-#ifdef CLOCK_MONOTONIC
-		timespec start, end;
-		clock_gettime(CLOCK_MONOTONIC, &start);
-#endif
-		std::cout << "collecting tiles" << std::flush;
-		populateTilesAtZoom(sources, zoomResults);
-#ifdef CLOCK_MONOTONIC
-		clock_gettime(CLOCK_MONOTONIC, &end);
-		uint64_t tileNs = 1e9 * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec;
-		std::cout << ": " << (uint32_t)(tileNs / 1e6) << "ms";
-#endif
-	}
-
-	// Add LossyTileCoordinatesSet, if needed
-	for (uint zoom = 15u; zoom <= sharedData.config.endZoom; zoom++) {
-		zoomResults.emplace_back(std::make_shared<LossyTileCoordinatesSet>(zoom, *zoomResults[14]));
-	}
-
-	std::cout << ", filtering tiles:" << std::flush;
-	for (uint zoom=sharedData.config.startZoom; zoom <= sharedData.config.endZoom; zoom++) {
-		std::cout << " z" << std::to_string(zoom) << std::flush;
-#ifdef CLOCK_MONOTONIC
-		timespec start, end;
-		clock_gettime(CLOCK_MONOTONIC, &start);
-#endif
-
-		const auto& zoomResult = zoomResults[zoom];
-		int numTiles = 0;
-		// Only the tiles over the area, or the one tile asked for
+	// The tiles over the area, or the one tile asked for, from z11 up; those
+	// with nothing in them are skipped
+	uint64_t tilesWritten = 0;
+	for (uint zoom = sharedData.config.startZoom; zoom <= sharedData.config.endZoom; zoom++) {
 		uint32_t minX = 0, maxX = (1u << zoom) - 1, minY = 0, maxY = (1u << zoom) - 1;
 		if (options.hasTile) {
 			minX = maxX = options.tileX;
@@ -413,114 +347,35 @@ int main(const int argc, const char* argv[]) {
 			minY = latp2tiley(clippingBox.max_corner().y(), zoom);
 			maxY = std::min(maxY, latp2tiley(clippingBox.min_corner().y(), zoom));
 		}
+
 		for (uint32_t x = minX; x <= maxX; x++) {
 			for (uint32_t y = minY; y <= maxY; y++) {
-				if (!zoomResult->test(x, y))
+				TileCoordinates coords(x, y);
+				if (hasClippingBox && !options.hasTile && !boost::geometry::intersects(TileBbox(coords, zoom, false, false).getTileBox(), clippingBox))
 					continue;
-				if (hasClippingBox && !boost::geometry::intersects(TileBbox(TileCoordinates(x, y), zoom, false, false).getTileBox(), clippingBox))
-					continue;
 
-				tileCoordinates.push_back(std::make_pair(zoom, TileCoordinates(x, y)));
-				numTiles++;
-			}
-		}
-
-		std::cout << " (" << numTiles;
-#ifdef CLOCK_MONOTONIC
-		clock_gettime(CLOCK_MONOTONIC, &end);
-		uint64_t tileNs = 1e9 * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec;
-		std::cout << ", " << (uint32_t)(tileNs / 1e6) << "ms";
-
-#endif
-		std::cout << ")" << std::flush;
-	}
-	zoomResults.clear();
-
-	std::cout << std::endl;
-
-	// Cluster tiles: breadth-first for z0..z5, depth-first for z6
-	sortTileCoordinates(config.baseZoom, options.threadNum, tileCoordinates);
-
-	std::size_t batchSize = 0;
-	for(std::size_t startIndex = 0; startIndex < tileCoordinates.size(); startIndex += batchSize) {
-		// Compute how many tiles should be assigned to this batch --
-		// higher-zoom tiles are cheaper to compute, lower-zoom tiles more expensive.
-		batchSize = 0;
-		size_t weight = 0;
-		while (weight < 1000 && startIndex + batchSize < tileCoordinates.size()) {
-			const auto& zoom = tileCoordinates[startIndex + batchSize].first;
-			if (zoom > 12)
-				weight++;
-			else if (zoom > 11)
-				weight += 10;
-			else if (zoom > 10)
-				weight += 100;
-			else
-				weight += 1000;
-
-			batchSize++;
-		}
-
-		boost::asio::post(pool, [=, &tileCoordinates, &pool, &sharedData, &sources, &attributeStore, &io_mutex, &tilesWritten, &lastTilesWritten]() {
-			std::vector<std::string> tileTimings;
-			std::size_t endIndex = std::min(tileCoordinates.size(), startIndex + batchSize);
-			for(std::size_t i = startIndex; i < endIndex; ++i) {
-				unsigned int zoom = tileCoordinates[i].first;
-				TileCoordinates coords = tileCoordinates[i].second;
-
-#ifdef CLOCK_MONOTONIC
-				timespec start, end;
-				if (options.logTileTimings)
-					clock_gettime(CLOCK_MONOTONIC, &start);
-#endif
-
+				auto start = std::chrono::steady_clock::now();
 				std::vector<std::vector<OutputObjectID>> data;
+				bool empty = true;
 				for (auto source : sources) {
 					data.emplace_back(source->getObjectsForTile(sortOrders, zoom, coords));
+					empty = empty && data.back().empty();
 				}
+				if (empty) continue;
+
 				outputProc(sharedData, sources, attributeStore, data, coords, zoom);
+				tilesWritten++;
 
-#ifdef CLOCK_MONOTONIC
 				if (options.logTileTimings) {
-					clock_gettime(CLOCK_MONOTONIC, &end);
-					uint64_t tileNs = 1e9 * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec;
-					std::string output = "z" + std::to_string(zoom) + "/" + std::to_string(coords.x) + "/" + std::to_string(coords.y) + " took " + std::to_string(tileNs/1e6) + " ms";
-					tileTimings.push_back(output);
+					double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+					cout << "z" << zoom << "/" << x << "/" << y << " took " << ms << " ms" << endl;
+				} else if (ISATTY) {
+					cout << "z" << zoom << "/" << x << "/" << y << ", " << tilesWritten << " tiles written               \r" << std::flush;
 				}
-#endif
 			}
-
-			if (options.logTileTimings) {
-				const std::lock_guard<std::mutex> lock(io_mutex);
-				std::cout << std::endl;
-				for (const auto& output : tileTimings)
-					std::cout << output << std::endl;
-			}
-
-			tilesWritten += (endIndex - startIndex); 
-
-			if (io_mutex.try_lock()) {
-				uint64_t written = tilesWritten.load();
-
-				if (written >= lastTilesWritten + tileCoordinates.size() / 100 || ISATTY) {
-					lastTilesWritten = written;
-					// Show progress grouped by z6 (or lower)
-					size_t z = tileCoordinates[startIndex].first;
-					size_t x = tileCoordinates[startIndex].second.x;
-					size_t y = tileCoordinates[startIndex].second.y;
-					if (z > CLUSTER_ZOOM) {
-						x = x / (1 << (z - CLUSTER_ZOOM));
-						y = y / (1 << (z - CLUSTER_ZOOM));
-						z = CLUSTER_ZOOM;
-					}
-					cout << "z" << z << "/" << x << "/" << y << ", writing tile " << written << " of " << tileCoordinates.size() << "               \r" << std::flush;
-				}
-				io_mutex.unlock();
-			}
-		});
+		}
 	}
-	// Wait for all tasks in the pool to complete.
-	pool.join();
+	cout << endl << tilesWritten << " tiles written" << endl;
 
 	// ----	Close tileset
 

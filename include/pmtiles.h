@@ -33,7 +33,6 @@ public:
 	virtual ~PMTiles();
 
 	pmtiles::headerv3 header;
-	bool isSparse = true;
 
 	void open(std::string &filename);
 	void saveTile(int zoom, int x, int y, std::string &data);
@@ -41,14 +40,11 @@ public:
 
 private:
 	std::ofstream outputStream;
-	std::mutex fileMutex;	// guards file writes, numTilesWritten
-	std::mutex indexMutex;	// guards access to sparseIndex, denseIndex, tinyCache, numTilesAddressed
 	uint64_t leafStart = 0;
 	uint64_t numTilesWritten = 0;
 	uint64_t numTilesAddressed = 0;
 	uint64_t numTileEntries = 0;
-	std::map<uint64_t, TileOffset> sparseIndex;
-	std::vector<TileOffset> denseIndex;
+	std::map<uint64_t, TileOffset> tileIndex;
 	std::unordered_map<std::string, TileOffset> tinyCache;
 
 	void appendWithRLE(std::vector<pmtiles::entryv3> &entries, pmtiles::entryv3 &entry);

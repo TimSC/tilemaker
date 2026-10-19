@@ -15,12 +15,10 @@
 using namespace std;
 
 const std::string EMPTY_STRING = "";
-thread_local kaguya::State *g_luaState = nullptr;
-thread_local OsmLuaProcessing* osmLuaProcessing = nullptr;
+kaguya::State *g_luaState = nullptr;
+OsmLuaProcessing* osmLuaProcessing = nullptr;
 
-std::deque<std::mutex> vectorLayerMetadataMutexes;
 std::unordered_map<std::string, std::string> OsmLuaProcessing::dataStore;
-std::mutex OsmLuaProcessing::dataStoreMutex;
 
 void handleOsmLuaProcessingUserSignal(int signum) {
 	osmLuaProcessing->handleUserSignal(signum);
@@ -40,7 +38,7 @@ public:
 	}
 };
 
-thread_local Sigusr1Handler sigusr1Handler;
+static Sigusr1Handler sigusr1Handler;
 
 // A key in `currentTags`. If Lua code refers to an absent key,
 // found will be false.
@@ -202,7 +200,6 @@ void rawAccept() { return osmLuaProcessing->Accept(); }
 double rawAreaIntersecting(const std::string& layerName) { return osmLuaProcessing->AreaIntersecting(layerName); }
 
 void rawSetData(const std::string &key, const std::string &value) { 
-	std::lock_guard<std::mutex> lock(osmLuaProcessing->dataStoreMutex);
 	osmLuaProcessing->dataStore[key] = value;
 }
 std::string rawGetData(const std::string &key) {
@@ -242,9 +239,6 @@ OsmLuaProcessing::OsmLuaProcessing(
 	layers(layers) {
 
 	sigusr1Handler.initialize();
-	if (vectorLayerMetadataMutexes.size() <= layers.layers.size()) {
-		vectorLayerMetadataMutexes.resize(layers.layers.size() + 1);
-	}
 
 	// ----	Initialise Lua
 	g_luaState = &luaState;
@@ -1039,12 +1033,11 @@ std::string OsmLuaProcessing::FindInRelation(const std::string &key) {
 }
 
 // Record attribute name/type for vector_layers table
-thread_local std::vector<std::unordered_set<std::string>> alreadySeen;
+std::vector<std::unordered_set<std::string>> alreadySeen;
 
 void OsmLuaProcessing::setVectorLayerMetadata(const uint_least8_t layer, const string &key, const uint type) {
 	if (alreadySeen.size() <= layer) alreadySeen.resize(layer + 1);
 	if (alreadySeen[layer].count(key)) return;
-	std::lock_guard<std::mutex> lock(vectorLayerMetadataMutexes[layer]);
 	layers.layers[layer].attributeMap[key] = type;
 	alreadySeen[layer].insert(key);
 }

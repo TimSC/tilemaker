@@ -13,12 +13,10 @@
 class OsmMemTiles : public TileDataSource {
 
 public:
-	OsmMemTiles(size_t threadNum, uint indexZoom, bool includeID)
-		: TileDataSource(threadNum, indexZoom, includeID) {}
+	OsmMemTiles(uint indexZoom, bool includeID)
+		: TileDataSource(indexZoom, includeID) {}
 
 	std::string name() const override { return "osm"; }
-
-	void Clear();
 };
 
 #endif //_OSM_MEM_TILES

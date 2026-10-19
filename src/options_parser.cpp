@@ -1,6 +1,6 @@
 #include "options_parser.h"
 
-#include <thread>
+
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 #include <iostream>
@@ -33,12 +33,6 @@ po::options_description getParser(OptionsParser::Options& options) {
 		("verbose",po::bool_switch(&options.verbose),                                   "verbose error output")
 		("skip-integrity",po::bool_switch(&options.osm.skipIntegrity),                       "don't enforce way/node integrity")
 		("log-tile-timings", po::bool_switch(&options.logTileTimings), "log how long each tile takes");
-	po::options_description performance("Performance options");
-	performance.add_options()
-		("threads",po::value<uint32_t>(&options.threadNum)->default_value(0),              "number of threads (automatically detected if 0)")
-			;
-
-	desc.add(performance);
 	return desc;
 }
 
@@ -91,10 +85,6 @@ OptionsParser::Options OptionsParser::parse(const int argc, const char* argv[]) 
 		options.outputMode = OutputMode::MBTiles;
 	} else if (ends_with(options.outputFile, ".pmtiles")) {
 		options.outputMode = OutputMode::PMTiles;
-	}
-
-	if (options.threadNum == 0) {
-		options.threadNum = max(thread::hardware_concurrency(), 1u);
 	}
 
 	// ---- Check config

@@ -6,10 +6,7 @@
 using namespace sqlite;
 using namespace std;
 
-MBTiles::MBTiles():
-  pendingStatements1(std::make_shared<std::vector<PendingStatement>>()),
-  pendingStatements2(std::make_shared<std::vector<PendingStatement>>())
-{}
+MBTiles::MBTiles() {}
 
 MBTiles::~MBTiles() {
 	if (db && inTransaction) db << "COMMIT;"; // commit all the changes if open
@@ -50,50 +47,18 @@ void MBTiles::openForWriting(string &filename) {
 }
 	
 void MBTiles::writeMetadata(string key, string value) {
-	m.lock();
 	db << "REPLACE INTO metadata (name,value) VALUES (?,?);" << key << value;
-	m.unlock();
 }
 
-void MBTiles::insertOrReplace(int zoom, int x, int y, const std::string& data, bool isMerge) {
-	// NB: assumes we have the `m` mutex
+void MBTiles::saveTile(int zoom, int x, int y, string *data, bool isMerge) {
 	int tmsY = pow(2, zoom) - 1 - y;
 	int s = isMerge ? 1 : 0;
 	preparedStatements[s].reset();
-	preparedStatements[s] << zoom << x << tmsY && data;
+	preparedStatements[s] << zoom << x << tmsY && *data;
 	preparedStatements[s].execute();
 }
 
-void MBTiles::flushPendingStatements() {
-	// NB: assumes we have the `m` mutex
-
-	for (int i = 0; i < 2; i++) {
-		while(!pendingStatements2->empty()) {
-			const PendingStatement& stmt = pendingStatements2->back();
-			insertOrReplace(stmt.zoom, stmt.x, stmt.y, stmt.data, stmt.isMerge);
-			pendingStatements2->pop_back();
-		}
-
-		std::lock_guard<std::mutex> lock(pendingStatementsMutex);
-		pendingStatements1.swap(pendingStatements2);
-	}
-}
-	
-void MBTiles::saveTile(int zoom, int x, int y, string *data, bool isMerge) {
-	// If the lock is available, write directly to SQLite.
-	if (m.try_lock()) {
-		insertOrReplace(zoom, x, y, *data, isMerge);
-		flushPendingStatements();
-		m.unlock();
-	} else {
-		// Else buffer the write for later, copying its binary blob.
-		const std::lock_guard<std::mutex> lock(pendingStatementsMutex);
-		pendingStatements1->push_back({zoom, x, y, *data, isMerge});
-	}
-}
-
 void MBTiles::closeForWriting() {
-	flushPendingStatements();
 	preparedStatements[0].used(true);
 	preparedStatements[1].used(true);
 }
@@ -125,17 +90,13 @@ vector<char> MBTiles::readTile(int zoom, int col, int row) {
 }
 
 bool MBTiles::readTileAndUncompress(string &data, int zoom, int x, int y, bool isCompressed, bool asGzip) {
-	m.lock();
 	int tmsY = pow(2,zoom) - 1 - y;
 	int exists=0;
 	db << "SELECT COUNT(*) FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?" << zoom << x << tmsY >> exists;
-	m.unlock();
 	if (exists==0) return false;
 
-	m.lock();
 	std::vector<char> compressed;
 	db << "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?" << zoom << x << tmsY >> compressed;
-	m.unlock();
 
 	if (!isCompressed) {
 		data = std::string(compressed.data(), compressed.size());

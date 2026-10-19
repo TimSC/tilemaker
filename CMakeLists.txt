@@ -167,12 +167,10 @@ file(GLOB tilemaker_src_files
 	src/osm_lua_processing.cpp
 	src/osm_area_processor.cpp
 	src/osm_db_reader.cpp
-	src/osm_mem_tiles.cpp
 	src/osm_reader.cpp
 	src/osm_store.cpp
 	src/output_object.cpp
 	src/pmtiles.cpp
-	src/pooled_string.cpp
 	src/relation_roles.cpp
 	src/shared_data.cpp
 	src/shp_mem_tiles.cpp
@@ -180,9 +178,7 @@ file(GLOB tilemaker_src_files
 	src/significant_tags.cpp
 	src/simplify_buildings.cpp
 	src/tag_map.cpp
-	src/tile_coordinates_set.cpp
 	src/tile_data.cpp
-	src/tile_sorting.cpp
 	src/tilemaker.cpp
 	src/tile_worker.cpp
 	src/visvalingam.cpp
@@ -244,17 +240,13 @@ if(TILEMAKER_BUILD_TESTS)
 		add_test(NAME ${name} COMMAND test_${name} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 	endfunction()
 
-	tilemaker_test(append_vector)
-	tilemaker_test(attribute_store src/attribute_store.cpp src/pooled_string.cpp)
+	tilemaker_test(attribute_store src/attribute_store.cpp)
 	tilemaker_test(config_validator src/config_validator.cpp)
-	tilemaker_test(deque_map)
 	tilemaker_test(helpers src/helpers.cpp ${libdeflate_src_files})
 	tilemaker_test(options_parser src/options_parser.cpp)
 	tilemaker_test(osm_reader src/osm_reader.cpp)
 	target_link_libraries(test_osm_reader cppo5m::cppo5m)
 	tilemaker_test(osm_store src/osm_store.cpp src/coordinates.cpp src/relation_roles.cpp)
-	tilemaker_test(pooled_string src/pooled_string.cpp)
 	tilemaker_test(relation_roles src/relation_roles.cpp)
 	tilemaker_test(significant_tags src/significant_tags.cpp src/tag_map.cpp)
-	tilemaker_test(tile_coordinates_set src/tile_coordinates_set.cpp)
 endif()
