@@ -4,7 +4,7 @@ tilemaker-core renders the vector tiles (in Mapbox Vector Tile format) of a smal
 
 * Input: an `.osm`, `.o5m`, `.pbf` or OSM JSON file covering the area (such as an API map query), read by [cppo5m](https://github.com/TimSC/cppo5m).
 * Output: `.mbtiles`, `.pmtiles`, or a directory of tiles.
-* Zooms: 11 and up. Lower zooms would need far larger areas.
+* Zooms: any; for low zooms, give it summarised data, as pycromap does, since their tiles cover far larger areas.
 * Everything is held in memory, which is fine for an area a few tiles across.
 
 Upstream tilemaker's PBF reader, its on-disk, sorted and sharded stores and lazy geometries have been removed.

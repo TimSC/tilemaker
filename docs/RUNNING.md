@@ -8,11 +8,11 @@ The following document explains each option.
 
 ## What it does
 
-tilemaker-core renders the vector tiles of one area, from z11 up to the config's maxzoom. Its
-input is the OpenStreetMap data of that area: the objects in it and around it, as a map
+tilemaker-core renders the vector tiles of one area, from the config's minzoom to its maxzoom.
+Its input is the OpenStreetMap data of that area: the objects in it and around it, as a map
 query returns them. It holds the whole input in memory, so the area should be small: a few
-tiles across, not a country. Lower zooms would need far larger areas, so the config's minzoom
-is raised to 11.
+tiles across, not a country. A low zoom's tiles cover far more than that, so the input should
+be summarised for them (pycromap does this); or set the config's minzoom to leave them out.
 
 ## From a file
 
@@ -46,15 +46,16 @@ specifying a directory path for `--output`.
 The input should cover the tile and a margin of an eighth of it on each side, so that labels and
 lines crossing its edges are included; `--bbox` is not needed. Write it to a directory: the tile is at
 `tiles/14/8142/5499.pbf`, gzipped unless the config's `compress` setting says otherwise, and is
-missing if there was nothing to draw. The tile must be z11 or higher, and no higher than the
-config's maxzoom.
+missing if there was nothing to draw. The tile can be at any zoom no higher than the config's
+maxzoom.
 
-Without `--tile`, tilemaker renders every tile of the area, from z11 to maxzoom.
+Without `--tile`, tilemaker renders every tile of the area, from the config's minzoom to its
+maxzoom.
 
 ## Performance
 
 tilemaker-core runs on one thread: a single tile has nothing to share between threads, and an
-area of z11+ tiles takes seconds. To render several tiles at once, run several tilemakers.
+small area's tiles take seconds. To render several tiles at once, run several tilemakers.
 
 ## Output messages
 

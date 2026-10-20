@@ -42,9 +42,6 @@ namespace geom = boost::geometry;
 // Global verbose switch
 bool verbose = false;
 
-// The lowest zoom rendered. An area's data is only enough for tiles inside it,
-// and lower zooms would need far larger areas than the input is meant to hold.
-const unsigned int MIN_ZOOM = 11;
 
 /**
  *\brief The Main function is responsible for command line processing, loading data and writing the tiles.
@@ -75,10 +72,6 @@ int main(const int argc, const char* argv[]) {
 	// One tile: read it and a margin around it, for what crosses its edges
 	// (labels, and the buffer tiles are drawn with)
 	if (options.hasTile) {
-		if (options.tileZoom < MIN_ZOOM) {
-			cerr << "Tiles below z" << MIN_ZOOM << " are not rendered" << endl;
-			return -1;
-		}
 		const uint8_t z = options.tileZoom;
 		double west = tilex2lon(options.tileX, z), east = tilex2lon(options.tileX + 1, z);
 		double north = tiley2lat(options.tileY, z), south = tiley2lat(options.tileY + 1, z);
@@ -175,19 +168,12 @@ int main(const int argc, const char* argv[]) {
 		cerr << "Couldn't find expected details in JSON file." << endl;
 		return -1;
 	}
-	if (config.endZoom < MIN_ZOOM) {
-		cerr << "maxzoom must be at least " << MIN_ZOOM << endl;
-		return -1;
-	}
 	if (options.hasTile) {
 		if (options.tileZoom > config.endZoom) {
 			cerr << "The config's maxzoom is " << config.endZoom << endl;
 			return -1;
 		}
 		config.startZoom = config.endZoom = options.tileZoom;
-	} else if (config.startZoom < MIN_ZOOM) {
-		cout << "Rendering from z" << MIN_ZOOM << " (config minzoom is " << config.startZoom << ")" << endl;
-		config.startZoom = MIN_ZOOM;
 	}
 	if (hasClippingBox) {
 		cout << "Bounding box " << clippingBox.min_corner().x() << ", " << latp2lat(clippingBox.min_corner().y()) << ", " << 
