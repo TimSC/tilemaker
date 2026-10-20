@@ -1,8 +1,0 @@
-.git
-build/
-data/
-**/*.o
-**/*.a
-.env
-coastline/
-landcover/

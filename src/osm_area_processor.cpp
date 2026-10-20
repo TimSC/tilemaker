@@ -7,7 +7,6 @@
 #include "osm_lua_processing.h"
 #include "osm_store.h"
 #include "tag_map.h"
-#include <boost/geometry/io/wkt/read.hpp>
 
 using namespace std;
 
@@ -39,45 +38,6 @@ bool relationIsType(const OsmAreaRelation& relation, const string& type) {
 
 LatpLon toLatpLon(double lat, double lon) {
 	return { int(lat2latp(lat) * 10000000.0), int(std::lround(lon * 10000000.0)) };
-}
-
-// Shapes are read in degrees of latitude; tilemaker works in latp
-template<class Geometry>
-void projectLatp(Geometry& geometry) {
-	geom::for_each_point(geometry, [](Point& p) { p.set<1>(lat2latp(p.get<1>())); });
-}
-
-// A cached way shape (WKT in degrees) as node locations
-bool readWayShape(const string& wkt, LatpLonVec& llVec) {
-	Linestring ls;
-	try {
-		geom::read_wkt(wkt, ls);
-	} catch (const geom::read_wkt_exception&) {
-		return false;
-	}
-	for (const Point& p : ls)
-		llVec.push_back(toLatpLon(p.get<1>(), p.get<0>()));
-	return !llVec.empty();
-}
-
-// A cached relation shape: a MULTIPOLYGON for an area, otherwise a MULTILINESTRING
-bool readRelationShape(const string& wkt, RelationShape& shape) {
-	try {
-		shape.isArea = wkt.rfind("MULTIPOLYGON", 0) == 0;
-		if (shape.isArea) {
-			shape.area.clear();
-			geom::read_wkt(wkt, shape.area);
-			projectLatp(shape.area);
-			geom::correct(shape.area);
-		} else {
-			shape.lines.clear();
-			geom::read_wkt(wkt, shape.lines);
-			projectLatp(shape.lines);
-		}
-	} catch (const geom::read_wkt_exception&) {
-		return false;
-	}
-	return true;
 }
 
 // Relations: let relation_scan_function accept the ones relation_function will
@@ -159,14 +119,10 @@ void processWays(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing& outp
 		WayID wayId = static_cast<WayID>(way.id);
 		if (wayId >= MAX_WAY_ID) throw runtime_error("Way ID negative or too large: " + to_string(way.id));
 
-		// A cached shape stands in for the nodes
 		llVec.clear();
-		if (way.shapeWkt.empty() || !readWayShape(way.shapeWkt, llVec)) {
-			llVec.clear();
-			if (!wayNodeLocations(way, osmStore, llVec)) {
-				incomplete++;
-				if (osmStore.integrity_enforced()) continue;
-			}
+		if (!wayNodeLocations(way, osmStore, llVec)) {
+			incomplete++;
+			if (osmStore.integrity_enforced()) continue;
 		}
 		if (llVec.empty()) continue;
 
@@ -191,7 +147,6 @@ void processRelations(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing&
 	TagMap tags;
 	WayVec outerWayVec, innerWayVec;
 	vector<RelationNodeMember> nodeMembers;
-	RelationShape shape;
 	for (const OsmAreaRelation& relation : area.relations) {
 		bool isMultiPolygon = relationIsType(relation, "multipolygon");
 		bool isBoundary = relationIsType(relation, "boundary");
@@ -218,10 +173,8 @@ void processRelations(const OsmArea& area, OSMStore& osmStore, OsmLuaProcessing&
 			readTags(relation.tags, tags);
 
 		if (!osmStore.usedRelations.count(relid) && !wayKeys.filter(tags)) continue;
-		bool hasShape = !relation.shapeWkt.empty() && readRelationShape(relation.shapeWkt, shape);
 		try {
-			output.setRelation(relid, nodeMembers, outerWayVec, innerWayVec, tags, isMultiPolygon, isInnerOuter,
-				hasShape ? &shape : nullptr);
+			output.setRelation(relid, nodeMembers, outerWayVec, innerWayVec, tags, isMultiPolygon, isInnerOuter);
 		} catch (out_of_range& err) {
 			// A member way is missing, most likely outside the area
 			if (verbose) cerr << "Relation " << relid << ": " << err.what() << endl;

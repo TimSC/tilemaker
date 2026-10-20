@@ -37,102 +37,29 @@ OpenMapTiles-compatible script.
 You can output to an .mbtiles or .pmtiles file, or write tiles directly to the filesystem by
 specifying a directory path for `--output`.
 
-## From the map database
-
-tilemaker-core can read a pycrocosm map database directly, without going through the API:
-
-    PGHOST=localhost PGDATABASE=map PGUSER=renderer \
-    tilemaker --db \
-              --bbox -1.095,50.795,-1.085,50.8 \
-              --output area.mbtiles \
-              --config resources/config-openmaptiles.json \
-              --process resources/process-openmaptiles.lua
-
-`--db` alone connects with the libpq `PG*` environment variables; it can also take a libpq
-connection string, such as `--db "host=localhost dbname=map user=renderer"`. Keep the password
-in `PGPASSWORD` or `~/.pgpass` rather than on the command line. A role that can only read is
-enough: everything is read in one read-only transaction.
-
-Like pgmap, tilemaker reads two layers of tables: the static layer, the imported planet, named
-by `--table-prefix` (pgmap's `dbtableprefix`, by default `planet_static_`), and the modify layer
-of edits over it, named by `--modify-prefix` (`dbtablemodifyprefix`, by default
-`pycrocosm_mod_`). An object the modify layer has taken over, whether edited or deleted, is
-read from it; anything else from the static layer. Together they are the current map. With an
-empty `--table-prefix`, the modify layer's `visible*` views are read alone; they include
-whatever static layer pgmap made them with.
-
-The map must store way and relation bounding boxes, which is how the ways and relations
-reaching into the area are found. Map schema versions 15 and 16 are supported; anything else
-is refused.
-
-If the map keeps the shape cache (pgmap's `way_shapes` and `relation_shapes`), ways and
-relations take their shapes from it. Without it, ways are built from their nodes, fetching
-those outside the area by ID, and multipolygons whose ways reach outside the area have those
-ways fetched too, so that they are whole. Other relations, such as boundaries, are built from
-the ways in the area only.
-
 ## One tile
 
 `--tile z/x/y` renders just that tile, for example to make tiles as they are asked for:
 
-    tilemaker --db --tile 14/8142/5499 --output tiles
+    tilemaker --input tile.o5m --tile 14/8142/5499 --output tiles
 
-The area read is the tile and a margin of an eighth of it on each side, so that labels and lines
-crossing its edges are included; `--bbox` is not needed. Write it to a directory: the tile is at
+The input should cover the tile and a margin of an eighth of it on each side, so that labels and
+lines crossing its edges are included; `--bbox` is not needed. Write it to a directory: the tile is at
 `tiles/14/8142/5499.pbf`, gzipped unless the config's `compress` setting says otherwise, and is
 missing if there was nothing to draw. The tile must be z11 or higher, and no higher than the
 config's maxzoom.
 
 Without `--tile`, tilemaker renders every tile of the area, from z11 to maxzoom.
 
-## The demonstration server
-
-`tilemaker-server` shows tiles on a map in a browser. It serves an .mbtiles:
-
-    cd server
-    tilemaker-server area.mbtiles
-
-or, with `--render`, renders each tile from the map database as the map asks for it, by running
-tilemaker with `--tile` (the program beside it, unless `--tilemaker` says otherwise):
-
-    cd server
-    tilemaker-server --render --bbox -1.095,50.795,-1.085,50.8 \
-                     --config ../resources/config-openmaptiles.json \
-                     --process ../resources/process-openmaptiles.lua
-
-`--bbox` is where the map opens. The database is given as for tilemaker (`--db`, or the `PG*`
-environment variables, `--table-prefix` and `--modify-prefix`). `--threads` tiles are rendered at once (4 by
-default), each allowed `--timeout` seconds (60). Tiles below z11 are empty. Each tile is
-rendered afresh, so the map shows edits as soon as they are made; the config, Lua and any
-shapefiles are loaded again for each tile, so keep large shapefiles out of the config.
-
-The map is at http://localhost:8081/ (`--port` to change it).
-
-## Filtering
-
-You can tell tilemaker to only look at objects with certain tags. If you're making a thematic
-map, this allows tilemaker to skip data it won't need. Specify this in your Lua file like one
-of these three examples:
-
-    -- Only include major roads
-    way_keys = {"highway=motorway", "highway=trunk", "highway=primary", "highway=secondary"}
-
-    -- Only include railways
-    way_keys = {"railway"}
-
-    -- Include everything but not buildings
-    way_keys = {"~building"}
-
 ## Performance
 
 tilemaker-core runs on one thread: a single tile has nothing to share between threads, and an
-area of z11+ tiles takes seconds. To render several tiles at once, run several tilemakers, as
-the demonstration server does.
+area of z11+ tiles takes seconds. To render several tiles at once, run several tilemakers.
 
 ## Output messages
 
 Running tilemaker with the `--verbose` argument will output any issues encountered during tile
-creation, and with `--db`, the time each query took.
+creation.
 
 Running tilemaker with the `--quiet` argument will suppress anything written to stdout during
 tile creation. stderr is unaffected.

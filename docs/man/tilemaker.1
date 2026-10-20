@@ -5,7 +5,7 @@ tilemaker \- Renders the vector tiles of an area from its OpenStreetMap data
 .SH SYNOPSIS
 tilemaker --input area.osm --output area.mbtiles
 .br
-tilemaker --db --bbox minlon,minlat,maxlon,maxlat --output area.mbtiles
+tilemaker --input tile.o5m --tile z/x/y --output tiles
 .SH DESCRIPTION
 This manual page documents briefly the
 .B tilemaker
@@ -13,7 +13,7 @@ command of tilemaker-core.
 .PP
 .B tilemaker
 renders the vector tiles of a small area, from zoom 11 up, from the
-OpenStreetMap data of that area: a file, or a pycrocosm map database. It
+OpenStreetMap data of that area, read from a file. It
 uses the schema of OpenMapTiles by default, but custom vector tiles can be
 produced by modifying the JSON config (layer config and general options)
 and Lua processing script (mapping OSM tags to vector tile layers/attributes).
@@ -25,18 +25,6 @@ A summary of options is included below:
 \fB\-\-input
 Source file covering the area (.osm, .o5m, .pbf or .json). May be given
 more than once.
-.TP
-\fB\-\-db
-Read from a pycrocosm map database. Takes an optional libpq connection
-string; without one, the PG* environment variables are used. Needs \-\-bbox.
-.TP
-\fB\-\-table\-prefix
-The map database's static tables, the imported planet (planet_static_ if
-not specified). Empty to read the modify tables' views alone.
-.TP
-\fB\-\-modify\-prefix
-The map database's modify tables, the edits over the static ones
-(pycrocosm_mod_ if not specified).
 .TP
 \fB\-\-output
 Target path for vector tiles. Specify .mbtiles/.sqlite to create
@@ -52,12 +40,12 @@ Path to Lua processing script for processing tags. process.lua assumed if
 not specified.
 .TP
 \fB\-\-tile
-Render just this tile, given as z/x/y, reading the tile and a margin around
-it. Write it to a directory.
+Render just this tile, given as z/x/y. The input should cover the tile and
+a margin around it. Write it to a directory.
 .TP
 \fB\-\-bbox
-The area to render (as minlon,minlat,maxlon,maxlat). Needed with \-\-db;
-otherwise the bounds the input declares, or of its nodes, are used.
+The area to render (as minlon,minlat,maxlon,maxlat). Otherwise the bounds
+the input declares, or of its nodes, are used.
 .TP
 \fB\-\-skip\-integrity
 Use ways that are missing some of their nodes, rather than skipping them.

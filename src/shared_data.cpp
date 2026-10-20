@@ -1,4 +1,5 @@
 #include "shared_data.h"
+#include <boost/filesystem.hpp>
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
@@ -87,7 +88,12 @@ void SharedData::writeFileMetadata(rapidjson::Document const &jsonConfig) {
 	document.AddMember("maxzoom",       rapidjson::Value(config.endZoom), document.GetAllocator());
 	document.AddMember("vector_layers", layers.serialiseToJSONValue(document.GetAllocator()), document.GetAllocator());
 
+	// The directory is only made when a tile is written, so with nothing to
+	// draw it may not exist yet
+	boost::filesystem::create_directories(outputFile);
 	auto fp = std::fopen((outputFile + "/metadata.json").c_str(), "w");
+	if (!fp)
+		throw std::runtime_error("Couldn't write " + outputFile + "/metadata.json");
 
 	char writeBuffer[65536];
 	rapidjson::FileWriteStream os(fp, writeBuffer, sizeof(writeBuffer));

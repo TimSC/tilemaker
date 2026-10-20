@@ -27,10 +27,6 @@ namespace OptionsParser {
 
 	struct Options {
 		std::vector<std::string> inputFiles;
-		bool useDatabase = false;
-		std::string dbConnection;
-		std::string tablePrefix;
-		std::string modifyPrefix;
 		std::string luaFile;
 		std::string jsonFile;
 		std::string outputFile;

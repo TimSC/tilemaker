@@ -21,11 +21,8 @@ po::options_description getParser(OptionsParser::Options& options) {
 		("help",                                                                 "show help message")
 		("input",  po::value< vector<string> >(&options.inputFiles),                     "source .osm, .o5m or .pbf file covering the area")
 		("output", po::value< string >(&options.outputFile),                             "target directory or .mbtiles/.pmtiles file")
-		("db",     po::value< string >(&options.dbConnection)->implicit_value(""),       "read from the pycrocosm map database, as a libpq connection string; alone, the PG* environment variables are used (keep the password in PGPASSWORD or ~/.pgpass)")
-		("table-prefix", po::value< string >(&options.tablePrefix)->default_value("planet_static_"), "map database static tables, the imported planet (pgmap's dbtableprefix); empty to read the modify tables' views alone")
-		("modify-prefix", po::value< string >(&options.modifyPrefix)->default_value("pycrocosm_mod_"), "map database modify tables, the edits over the static ones (pgmap's dbtablemodifyprefix)")
-		("tile",   po::value< string >(),                                                 "render just this tile, as z/x/y (the area read is the tile and a margin around it)")
-		("bbox",   po::value< string >(&options.bbox),                                   "area to render (needed with --db, or if the input does not give its bounds), example: minlon,minlat,maxlon,maxlat")
+		("tile",   po::value< string >(),                                                 "render just this tile, as z/x/y; the input should cover the tile and a margin of an eighth of it on each side")
+		("bbox",   po::value< string >(&options.bbox),                                   "area to render, if the input does not give its bounds, example: minlon,minlat,maxlon,maxlat")
 		("config", po::value< string >(&options.jsonFile)->default_value("config.json"), "config JSON file")
 		("process",po::value< string >(&options.luaFile)->default_value("process.lua"),  "tag-processing Lua file")
 		("quiet",  po::bool_switch(&options.quiet),                                      "quiet, suppress standard output")
@@ -72,10 +69,6 @@ OptionsParser::Options OptionsParser::parse(const int argc, const char* argv[]) 
 		options.hasTile = true;
 	}
 
-	options.useDatabase = vm.count("db") > 0;
-	if (options.useDatabase && options.bbox.empty() && !options.hasTile) {
-		throw OptionException{ "--db needs a --bbox or a --tile." };
-	}
 	if (vm.count("output") == 0) {
 		throw OptionException{ "You must specify an output file or directory. Run with --help to find out more." };
 	}

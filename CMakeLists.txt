@@ -57,8 +57,6 @@ endif()
 
 find_package(libshp REQUIRED)
 
-find_package(PostgreSQL REQUIRED)
-
 find_package(ZLIB REQUIRED)
 
 # cppo5m reads the OSM input. By default it is built from the submodule; set
@@ -157,7 +155,6 @@ file(GLOB tilemaker_src_files
 	src/options_parser.cpp
 	src/osm_lua_processing.cpp
 	src/osm_area_processor.cpp
-	src/osm_db_reader.cpp
 	src/osm_reader.cpp
 	src/osm_store.cpp
 	src/output_object.cpp
@@ -184,7 +181,6 @@ target_link_libraries(tilemaker
 		SQLite::SQLite3
 		Rapidjson::rapidjson
 		cppo5m::cppo5m
-		PostgreSQL::PostgreSQL
 		ZLIB::ZLIB
 		Boost::filesystem Boost::program_options)
 if(BOOST_HAS_SYSTEM)
@@ -202,15 +198,7 @@ endif()
 
 install(FILES docs/man/tilemaker.1 DESTINATION share/man/man1)
 
-# A demonstration server for the tiles, with a map page (server/static)
-add_executable(tilemaker-server server/server.cpp)
-target_include_directories(tilemaker-server PRIVATE include)
-target_link_libraries(tilemaker-server ${THREAD_LIB} ${CMAKE_DL_LIBS} SQLite::SQLite3 Boost::filesystem Boost::program_options)
-if(BOOST_HAS_THROW_EXCEPTION)
-	target_link_libraries(tilemaker-server Boost::throw_exception)
-endif()
-
-install(TARGETS tilemaker tilemaker-server RUNTIME DESTINATION bin)
+install(TARGETS tilemaker RUNTIME DESTINATION bin)
 
 # ******* Tests *******
 # Each test builds with just the sources it needs; run them with ctest.

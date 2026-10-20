@@ -20,7 +20,7 @@ jobs:
         sudo apt-get install -y --no-install-recommends \
           build-essential cmake liblua5.1-0-dev libsqlite3-dev libshp-dev \
           libboost-program-options-dev libboost-filesystem-dev libboost-system-dev \
-          rapidjson-dev libexpat1-dev zlib1g-dev libprotobuf-dev protobuf-compiler libpq-dev
+          rapidjson-dev libexpat1-dev zlib1g-dev libprotobuf-dev protobuf-compiler
 
     - name: Build
       run: |

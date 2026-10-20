@@ -22,7 +22,7 @@ Often, rather than writing thousands of individual .mvt files, you'll store them
 
 ## Source data
 
-You'll mostly use OpenStreetMap's openly-licensed map data to make your vector tiles. tilemaker-core renders a small area at a time, so it takes the data of just that area: a map query from an API, or the tables of a pycrocosm map database.
+You'll mostly use OpenStreetMap's openly-licensed map data to make your vector tiles. tilemaker-core renders a small area at a time, so it takes the data of just that area, such as a map query from an API.
 
 You might use other openly-licensed sources for coastlines and small-scale landuse. Tilemaker can read such data in shapefile format.
 
@@ -38,7 +38,7 @@ There's no one standard schema, but that used by the OpenMapTiles project is pop
 
 Once you've generated your vector tiles, you need to render them on-screen. This is outside tilemaker's scope, but here's some pointers.
 
-If you're serving them over the web, you'll need a server which accepts requests, and responds with the relevant tile. You'll usually do this by reading the record from the .mbtiles container (for which you can use a SQLite client library) and sending it back over HTTP. The bundled `tilemaker-server` will do this for you, and there's also a Ruby example of how to do this in tilemaker's `server/` directory. Ready-made servers in other languages are available as open source, such as [mbtileserver](https://github.com/consbio/mbtileserver) (Go) and [tileserver-php](https://github.com/maptiler/tileserver-php), or you can use [tileserverless](https://github.com/geolonia/tileserverless) to serve direct from AWS.
+If you're serving them over the web, you'll need a server which accepts requests, and responds with the relevant tile. You'll usually do this by reading the record from the .mbtiles container (for which you can use a SQLite client library) and sending it back over HTTP. Ready-made servers in other languages are available as open source, such as [mbtileserver](https://github.com/consbio/mbtileserver) (Go) and [tileserver-php](https://github.com/maptiler/tileserver-php), or you can use [tileserverless](https://github.com/geolonia/tileserverless) to serve direct from AWS.
 
 It's then up to the client to render the tiles. There are a few libraries that do this, but the most popular and full-featured is that developed by Mapbox, usually known as Mapbox GL. The latest versions of this are closed-source and require a Mapbox contract, but the earlier open-source version has been forked and continues as [MapLibre GL](https://github.com/maplibre), which we recommend. There's a JavaScript version as well as an iOS/Android native version.
 
@@ -46,6 +46,6 @@ It's then up to the client to render the tiles. There are a few libraries that d
 
 The final ingredient is a styling file (stylesheet). This is a set of instructions telling the client how the vector tiles should be rendered: for example, "draw all rivers in blue" or "draw churches with a cross symbol".
 
-Mapbox/MapLibre GL uses a JSON file for this, which in turn may reference external icon and font files. The example server with tilemaker includes one such style, from the OpenMapTiles project; they offer [several others](https://openmaptiles.org/styles/). You can also use [Maputnik](https://maputnik.github.io/editor/) to design your own styles visually, or programmatically with [Glug](https://github.com/systemed/glug).
+Mapbox/MapLibre GL uses a JSON file for this, which in turn may reference external icon and font files. pycromap includes one such style, from the OpenMapTiles project; they offer [several others](https://openmaptiles.org/styles/). You can also use [Maputnik](https://maputnik.github.io/editor/) to design your own styles visually, or programmatically with [Glug](https://github.com/systemed/glug).
 
 **Extra detail:** You will sometimes see a "spec.json" or "tilejson" file. This is a way of specifying a link to your vector tile URL plus metadata such as minimum/maximum zoom in a single file. This is then referenced in the stylesheet, so the stylesheet knows where to pull the data from. But you can also specify this directly in the style file, and you may find that more straightforward.

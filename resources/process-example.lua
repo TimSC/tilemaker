@@ -15,9 +15,7 @@
 	It doesn't do much filtering by zoom level - all the roads appear all the
 	time. If you want a practice project, try fixing that!
 
-	You can view your output with tilemaker-server:
-
-	tilemaker-server /path/to/your.mbtiles --static server/static
+	You can view your output with pycromap's map page.
 
 ]]--
 

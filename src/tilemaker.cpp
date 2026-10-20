@@ -113,18 +113,6 @@ int main(const int argc, const char* argv[]) {
 			return -1;
 		}
 	}
-	if (options.useDatabase) {
-		vector<string> box = parseBox(options.bbox);
-		cout << "Reading the map database" << endl;
-		try {
-			ReadOsmDatabase(options.dbConnection, options.tablePrefix, options.modifyPrefix,
-				bboxElementFromStr(box.at(0)), bboxElementFromStr(box.at(1)),
-				bboxElementFromStr(box.at(2)), bboxElementFromStr(box.at(3)), osmArea);
-		} catch (const std::exception& e) {
-			cerr << e.what() << endl;
-			return -1;
-		}
-	}
 	cout << "Read " << osmArea.nodes.size() << " nodes, " << osmArea.ways.size() << " ways, " << osmArea.relations.size() << " relations" << endl;
 
 	// ----	The area's bounds: --bbox, or those the input gives, or those of its nodes

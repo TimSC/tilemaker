@@ -2,7 +2,6 @@
 *.o
 *.d
 tilemaker
-tilemaker-server
 build/
 tilemaker.dSYM/
 
@@ -26,8 +25,5 @@ coastline
 landcover
 /test.*
 
-# docker compose input and output
-/data/
-
-# Database settings for docker compose
-.env
+# Python environment
+venv/

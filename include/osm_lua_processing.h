@@ -43,13 +43,6 @@ struct RelationNodeMember {
 	std::string role;
 };
 
-// A relation's shape, already built (by the map database's shape cache), to
-// use rather than assembling it from the member ways
-struct RelationShape {
-	bool isArea;
-	MultiPolygon area;			// if isArea
-	MultiLinestring lines;		// otherwise
-};
 
 /**
 	\brief OsmLuaProcessing - converts OSM objects into OutputObjects.
@@ -118,8 +111,7 @@ public:
 		const WayVec& innerWayVec,
 		const TagMap& tags,
 		bool isNativeMP,
-		bool isInnerOuter,
-		const RelationShape* shape = nullptr
+		bool isInnerOuter
 	);
 
 	// ----	Metadata queries called from Lua

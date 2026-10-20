@@ -34,7 +34,6 @@ MU_TEST(test_read_osm_file) {
 
 	mu_check(area.ways.size() == 1);
 	mu_check(area.ways[0].refs.size() == 2 && area.ways[0].refs[1] == 2);
-	mu_check(area.ways[0].shapeWkt.empty());
 
 	mu_check(area.relations.size() == 1);
 	const auto& members = area.relations[0].members;

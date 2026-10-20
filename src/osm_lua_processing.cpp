@@ -1135,8 +1135,7 @@ void OsmLuaProcessing::setRelation(
 	const WayVec& innerWayVec,
 	const TagMap& tags,
 	bool isNativeMP, // only OSM type=multipolygon
-	bool isInnerOuter, // any OSM relation with "inner" and "outer" roles (e.g. type=multipolygon|boundary)
-	const RelationShape* shape
+	bool isInnerOuter // any OSM relation with "inner" and "outer" roles (e.g. type=multipolygon|boundary)
 ) {
 	reset();
 	currentRelationNodes = &nodeMembers;
@@ -1149,15 +1148,6 @@ void OsmLuaProcessing::setRelation(
 	outerWayVecPtr = &outerWayVec;
 	innerWayVecPtr = &innerWayVec;
 	currentTags = &tags;
-	if (shape != nullptr) {
-		if (shape->isArea) {
-			multiPolygonCache = shape->area;
-			multiPolygonInited = true;
-		} else {
-			multiLinestringCache = shape->lines;
-			multiLinestringInited = true;
-		}
-	}
 
 	if (supportsReadingRelations && osmStore.scannedRelations.relation_in_any_relations(originalOsmID)) {
 		relationList = osmStore.scannedRelations.relations_for_relation(originalOsmID);

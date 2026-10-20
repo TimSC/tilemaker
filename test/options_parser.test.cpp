@@ -53,7 +53,6 @@ MU_TEST(test_options_parser) {
 		mu_check(opts.inputFiles[0] == "area.o5m");
 		mu_check(opts.outputFile == "foo.mbtiles");
 		mu_check(opts.outputMode == OutputMode::MBTiles);
-		mu_check(!opts.useDatabase);
 	}
 
 	// Several input files
@@ -65,32 +64,9 @@ MU_TEST(test_options_parser) {
 		mu_check(opts.outputMode == OutputMode::PMTiles);
 	}
 
-	// The map database, with the PG* environment variables
+	// One tile
 	{
-		std::vector<std::string> args = {"--output", "foo.mbtiles", "--db", "--bbox", "-1.1,50.79,-1.08,50.8"};
-		auto opts = parse(args);
-		mu_check(opts.useDatabase);
-		mu_check(opts.dbConnection.empty());
-		mu_check(opts.tablePrefix == "planet_static_");
-		mu_check(opts.modifyPrefix == "pycrocosm_mod_");
-		mu_check(opts.inputFiles.empty());
-	}
-
-	// The map database, with a connection string and table set
-	{
-		std::vector<std::string> args = {"--output", "foo.mbtiles", "--db=dbname=map", "--table-prefix", "static_", "--modify-prefix", "mod_", "--bbox", "-1.1,50.79,-1.08,50.8"};
-		auto opts = parse(args);
-		mu_check(opts.useDatabase);
-		mu_check(opts.dbConnection == "dbname=map");
-		mu_check(opts.tablePrefix == "static_");
-		mu_check(opts.modifyPrefix == "mod_");
-	}
-
-	ASSERT_THROWS("--db needs a --bbox", "--output", "foo.mbtiles", "--db");
-
-	// One tile, from the map database
-	{
-		std::vector<std::string> args = {"--output", "tile", "--db", "--tile", "14/8142/5499"};
+		std::vector<std::string> args = {"--output", "tile", "--input", "tile.o5m", "--tile", "14/8142/5499"};
 		auto opts = parse(args);
 		mu_check(opts.hasTile);
 		mu_check(opts.tileZoom == 14 && opts.tileX == 8142 && opts.tileY == 5499);
