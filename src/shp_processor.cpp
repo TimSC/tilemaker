@@ -1,5 +1,7 @@
 #include "shp_processor.h"
 
+#include <cstdint>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <type_traits>
@@ -123,6 +125,42 @@ AttributeIndex ShpProcessor::readShapefileAttributes(
 	return attributeStore.add(attributes);
 }
 
+// A little-endian number at p, as a shapefile's records hold them
+static double readLittleEndianDouble(const unsigned char *p) {
+	uint64_t bits = 0;
+	for (int b = 7; b >= 0; b--) bits = (bits << 8) | p[b];
+	double value;
+	memcpy(&value, &bits, sizeof(value));
+	return value;
+}
+
+// The box of record i of a shapefile, from the start of the record alone: a
+// point is its own box, and a multipoint, polyline or polygon record begins
+// with its box. Reading this much of each record, where reading every
+// record whole costs a large shapefile (the coastline's is over a gigabyte)
+// half a second for each tile, finds those near the tile for little. False
+// if the record has no box (a null shape, or a type without one) or can't be
+// read, when it must be read whole to tell.
+static bool readRecordBox(SHPHandle shp, int i, double box[4]) {
+	if (i < 0 || i >= shp->nRecords) return false;
+	// After the record's 8-byte header: its type, then the box or point
+	unsigned char buf[36];
+	if (shp->sHooks.FSeek(shp->fpSHP, (SAOffset)shp->panRecOffset[i] + 8, SEEK_SET) != 0) return false;
+	if (shp->sHooks.FRead(buf, 1, sizeof(buf), shp->fpSHP) != sizeof(buf)) return false;
+	int type = buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24);
+	switch (type) {
+		case 1: case 11: case 21:		// point: x, y
+			box[0] = box[2] = readLittleEndianDouble(buf + 4);
+			box[1] = box[3] = readLittleEndianDouble(buf + 12);
+			return true;
+		case 3: case 5: case 8: case 13: case 15: case 18: case 23: case 25: case 28:	// xmin, ymin, xmax, ymax
+			for (int k = 0; k < 4; k++) box[k] = readLittleEndianDouble(buf + 4 + 8 * k);
+			return true;
+		default:
+			return false;
+	}
+}
+
 // Read shapefile, and create OutputObjects for all objects within the specified bounding box
 void ShpProcessor::read(class LayerDef &layer, uint layerNum)
 {
@@ -160,7 +198,19 @@ void ShpProcessor::read(class LayerDef &layer, uint layerNum)
 	int indexField=-1;
 	if (indexName!="") { indexField = DBFGetFieldIndex(dbf.get(),indexName.c_str()); }
 
+	auto outsideClippingBox = [&](double xmin, double ymin, double xmax, double ymax) {
+		return xmin > clippingBox.max_corner().get<0>() || xmax < clippingBox.min_corner().get<0>() ||
+			lat2latp(ymin) > clippingBox.max_corner().get<1>() || lat2latp(ymax) < clippingBox.min_corner().get<1>();
+	};
+
 	for (int i=0; i<numEntities; i++) {
+		// Records whose box misses are passed over without being read
+		double recordBox[4];
+		if (readRecordBox(shp.get(), i, recordBox) &&
+			outsideClippingBox(recordBox[0], recordBox[1], recordBox[2], recordBox[3])) {
+			continue;
+		}
+
 		SHPObject* rawShape = SHPReadObject(shp.get(), i);
 		if(rawShape == nullptr) { cerr << "Error loading shape from shapefile" << endl; continue; }
 		std::shared_ptr<SHPObject> shape(rawShape, SHPDestroyObject);
