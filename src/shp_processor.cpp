@@ -284,34 +284,50 @@ void ShpProcessor::processShapeGeometry(SHPObject* shape, AttributeIndex attrIdx
 
 		// To avoid expensive computations, we assume the shapefile has been pre-processed
 		// such that each polygon's exterior ring is immediately followed by its interior rings.
+		//
+		// Only the rings that reach the clipping box are kept: a ring wholly
+		// outside it can't change what is inside it, and a large polygon, as
+		// the coastline's water around a coast full of islands is (one has
+		// over 4,000 holes and 200,000 points), would otherwise be checked,
+		// made valid and clipped whole for each tile, taking seconds. An
+		// exterior ring outside the box takes its interior rings with it.
+		auto reaches = [&](const vector<Point> &pts) {
+			if (pts.empty()) return false;
+			double xmin = pts[0].x(), xmax = xmin, ymin = pts[0].y(), ymax = ymin;
+			for (const Point &pt : pts) {
+				xmin = std::min(xmin, pt.x()); xmax = std::max(xmax, pt.x());
+				ymin = std::min(ymin, pt.y()); ymax = std::max(ymax, pt.y());
+			}
+			return !(xmin > clippingBox.max_corner().get<0>() || xmax < clippingBox.min_corner().get<0>() ||
+				ymin > clippingBox.max_corner().get<1>() || ymax < clippingBox.min_corner().get<1>());
+		};
+		bool keeping = false;	// whether the current polygon reaches the box
 		for (int j=0; j<shape->nParts; j++) {
 			fillPointArrayFromShapefile(&points, shape, j);
 			// Read points into a ring
 			ring.clear();
 			geom::append(ring, points);
 
-			if (j == 0) {
-				// We assume the first part is an exterior ring of the first polygon.
-				geom::append(poly, ring);
-			}
-			else if (geom::area(ring) > 0.0) {
-				// This part has clockwise orientation - an exterior ring.
-				// Start a new polygon.
-				multi.push_back(poly);
+			// We assume the first part is an exterior ring of the first polygon;
+			// after it, clockwise orientation marks an exterior ring
+			if (j == 0 || geom::area(ring) > 0.0) {
+				// Start a new polygon, after keeping the last if it reaches the box
+				if (keeping) multi.push_back(poly);
 				poly.clear();
 				nInteriorRings = 0;
-				geom::append(poly, ring);
-			} else {
-				// This part has anti-clockwise orientation.
-				// Add another interior ring to the current polygon.
+				keeping = reaches(points);
+				if (keeping) geom::append(poly, ring);
+			} else if (keeping && reaches(points)) {
+				// An interior ring, of a polygon that is kept, reaching the box
 				nInteriorRings++;
 				geom::interior_rings(poly).resize(nInteriorRings);
 				geom::append(poly, ring, nInteriorRings - 1);
 			}
 		}
 
-		// All parts read. Add the last polygon.
-		multi.push_back(poly);
+		// All parts read. Add the last polygon, if it reaches the box.
+		if (keeping) multi.push_back(poly);
+		if (multi.empty()) return;
 		geom::remove_spikes(multi);
 
 		// Make valid if needs be
