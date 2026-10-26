@@ -151,6 +151,20 @@ void make_valid(MultiPolygon &mp)
 // `minArea` is the lower bound on the repaired area we are willing to accept.
 static bool repair_one_polygon(const Polygon &p, double minArea, MultiPolygon &out)
 {
+	// 0) Fast path: a ring without holes whose only fault is its orientation
+	// (e.g. after the y-flip into tile coordinates). On such a simple ring the
+	// dissolve finds no intersections and just reverses it, so do that directly.
+	// (From tilemaker PR #939.)
+	if (p.inners().empty()) {
+		Polygon rev = p;
+		std::reverse(rev.outer().begin(), rev.outer().end());
+		const double revArea = std::abs(geom::area(rev));
+		if (revArea > 1E-12 && revArea >= minArea && geom::is_valid(rev)) {
+			out.push_back(std::move(rev));
+			return true;
+		}
+	}
+
 	// 1) Dissolve (resolves self-intersections of this single polygon).
 	try {
 		MultiPolygon fixed;

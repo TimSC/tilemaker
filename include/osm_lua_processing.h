@@ -169,10 +169,33 @@ public:
 	CentroidAlgorithm parseCentroidAlgorithm(const std::string& algorithm) const;
 	Point calculateCentroid(CentroidAlgorithm algorithm);
 
-	enum class CorrectGeometryResult: char { Invalid = 0, Valid = 1, Corrected = 2 };
+	// Reversed: the only defect was ring orientation; geom now has every ring reversed
+	// and is valid (make_valid would produce the same rings).
+	enum class CorrectGeometryResult: char { Invalid = 0, Valid = 1, Corrected = 2, Reversed = 3 };
+
+	// Reverse every ring of a multipolygon in place. Only multipolygons are supported.
+	// Returns false (without reversing) if any ring is tiny: make_valid drops rings with
+	// |area| <= 1E-12, so those must take the make_valid path to get the same result.
+	// (From tilemaker PR #939.)
+	template<class GeometryT>
+	static bool ReverseRings(GeometryT &geom) { return false; }
+	static bool ReverseRings(MultiPolygon &geom) {
+		for (const auto &p : geom) {
+			if (std::abs(boost::geometry::area(p.outer())) <= 1E-12) return false;
+			for (const auto &inner : p.inners())
+				if (std::abs(boost::geometry::area(inner)) <= 1E-12) return false;
+		}
+		for (auto &p : geom) {
+			std::reverse(p.outer().begin(), p.outer().end());
+			for (auto &inner : p.inners())
+				std::reverse(inner.begin(), inner.end());
+		}
+		return true;
+	}
+
 	// ----	Requests from Lua to write this way/node to a vector tile's Layer
 	template<class GeometryT>
-	CorrectGeometryResult CorrectGeometry(GeometryT &geom)
+	CorrectGeometryResult CorrectGeometry(GeometryT &geom, bool allowReverse = false)
 	{
 		geom::validity_failure_type failure = geom::validity_failure_type::no_failure;
 		if (isRelation && !geom::is_valid(geom,failure)) {
@@ -180,7 +203,15 @@ public:
 		} else if (isWay && !geom::is_valid(geom,failure)) {
 			if (verbose && failure!=22) std::cout << "Way " << originalOsmID << " has " << boost_validity_error(failure) << std::endl;
 		}
-		
+
+		// Fast path: orientation-only defect. Reversing the rings is what make_valid
+		// produces in this case; fall back to make_valid if it isn't enough.
+		if (allowReverse && failure == boost::geometry::failure_wrong_orientation && ReverseRings(geom)) {
+			if (geom::is_valid(geom))
+				return CorrectGeometryResult::Reversed;
+			ReverseRings(geom);
+		}
+
 		if (failure==boost::geometry::failure_spikes)
 			geom::remove_spikes(geom);
 		if (failure == boost::geometry::failure_few_points) 

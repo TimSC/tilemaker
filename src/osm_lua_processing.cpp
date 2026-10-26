@@ -651,7 +651,7 @@ void OsmLuaProcessing::Layer(const string &layerName, bool area) {
 				mp.reserve(1);
 				mp.push_back(std::move(p));
 
-				auto correctionResult = CorrectGeometry(mp);
+				auto correctionResult = CorrectGeometry(mp, /*allowReverse=*/true);
 				if(correctionResult == CorrectGeometryResult::Invalid) return;
 				NodeID id = osmMemTiles.storeMultiPolygon(mp);
 				OutputObject oo(geomType, layers.layerMap[layerName], id, 0, layerMinZoom);
